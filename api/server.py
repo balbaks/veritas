@@ -5,16 +5,19 @@ from core.database import init_db, save_claim, save_proof, load_claims, load_pro
 from api.identity_routes import identity_router
 from api.content_routes import content_router, registry
 from api.agent_routes import agent_router, agent_registry, delegation_manager
-from api.economic_routes import economic_router
+from api.economic_routes import economic_router, economic_engine
 from identity.database import init_identity_db, load_identities, load_reputation_events
 from content.database import init_content_db, load_contents
 from agents.database import init_agent_db, load_agents, load_delegations
+from economic.database import init_economic_db, load_economic_data
 import api.identity_routes as identity_module
 import api.agent_routes as agent_module
+import api.economic_routes as economic_module
 
 agent_module.did_store_ref = identity_module.did_store
+economic_module.did_store_ref = identity_module.did_store
 
-app = FastAPI(title="VERITAS", version="0.9.0")
+app = FastAPI(title="VERITAS", version="0.9.1")
 engine = TrustEngine()
 
 
@@ -24,6 +27,7 @@ async def startup():
     await init_identity_db()
     await init_content_db()
     await init_agent_db()
+    await init_economic_db()
     engine.claims = await load_claims()
     engine.proofs = await load_proofs()
     loaded_identities = await load_identities()
@@ -34,6 +38,7 @@ async def startup():
     await load_contents(registry)
     await load_agents(agent_registry)
     await load_delegations(delegation_manager)
+    await load_economic_data(economic_engine)
 
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])

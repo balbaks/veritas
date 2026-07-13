@@ -48,5 +48,11 @@ class DelegationManager:
                     active.append(d)
         return active
 
-    def get_agent_delegations(self, agent_id: str) -> list:
-        return [d for d in self.delegations.values() if d["agent_id"] == agent_id and d["active"]]
+    def get_agent_delegations(self, agent_id: str, owner_did: str = None) -> list:
+        active = []
+        for d in self.delegations.values():
+            if d["agent_id"] == agent_id and d["active"]:
+                if datetime.fromisoformat(d["expires_at"]) > datetime.utcnow():
+                    if owner_did is None or d["owner_did"] == owner_did:
+                        active.append(d)
+        return active

@@ -137,7 +137,7 @@ def record_transaction(agent_id: str, req: TransactionRequest):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     is_owner = agent["owner_did"] == req.authorized_by
-    has_delegation = len(delegation_manager.get_agent_delegations(agent_id)) > 0
+    has_delegation = len(delegation_manager.get_agent_delegations(agent_id, req.authorized_by)) > 0
 
     if not is_owner and not has_delegation:
         raise HTTPException(status_code=403, detail="Not authorized to record transactions for this agent")

@@ -42,6 +42,8 @@ class EconomicEngine:
         tx = self.transactions.get(tx_id)
         if not tx:
             return None
+        if tx["status"] != "pending":
+            return None
 
         escrow_id = hashlib.sha256(f"escrow:{tx_id}:{datetime.utcnow().isoformat()}".encode()).hexdigest()[:16]
         self.escrows[escrow_id] = {
@@ -74,7 +76,7 @@ class EconomicEngine:
 
     def file_dispute(self, escrow_id: str, filed_by: str, reason: str, proof_hash: str) -> bool:
         escrow = self.escrows.get(escrow_id)
-        if not escrow or escrow["status"] not in [EscrowStatus.FUNDED, EscrowStatus.RELEASED]:
+        if not escrow or escrow["status"] != EscrowStatus.FUNDED:
             return False
         escrow["status"] = EscrowStatus.DISPUTED
         escrow["dispute_at"] = datetime.utcnow().isoformat()
