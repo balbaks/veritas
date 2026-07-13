@@ -3,17 +3,24 @@ from pydantic import BaseModel
 from core.engine import TrustEngine
 from core.database import init_db, save_claim, save_proof, load_claims, load_proofs
 from api.identity_routes import identity_router
+from identity.database import init_identity_db, load_identities, load_reputation_events
+import api.identity_routes as identity_module
 
-app = FastAPI(title="VERITAS TIPC", version="0.3.0")
+app = FastAPI(title="VERITAS", version="0.4.0")
 engine = TrustEngine()
 
 
 @app.on_event("startup")
 async def startup():
     await init_db()
+    await init_identity_db()
     engine.claims = await load_claims()
     engine.proofs = await load_proofs()
-
+    loaded_identities = await load_identities()
+    for did, data in loaded_identities.items():
+        identity_module.did_store[did] = data
+        identity_module.reputation.new_identity(did)
+    await load_reputation_events(identity_module.reputation)
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 
@@ -33,7 +40,7 @@ class ProofRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"protocol": "VERITAS", "layer": "TIPC", "status": "operational", "claims": len(engine.claims)}
+    return {"protocol": "VERITAS", "status": "operational", "claims": len(engine.claims), "identities": len(identity_module.did_store)}
 
 
 @app.post("/claim")

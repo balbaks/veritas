@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from identity.did import DID
 from identity.reputation import ReputationRegistry
+from identity.database import save_identity, save_reputation_event
+from datetime import datetime
 
 identity_router = APIRouter()
 reputation = ReputationRegistry()
-
-# In-memory DID store (will be persisted later)
 did_store: dict = {}
 
 
@@ -23,17 +23,23 @@ class ReputationAction(BaseModel):
 
 
 @identity_router.post("/did/create")
-def create_did():
+async def create_did():
     identity = DID()
+    public_key = identity.export_public_key()
+    private_key = identity.private_key.private_bytes_raw().hex()
+    created_at = datetime.utcnow().isoformat()
+
     did_store[identity.did] = {
-        "public_key": identity.export_public_key(),
-        "private_key": identity.private_key.private_bytes_raw().hex()
+        "public_key": public_key,
+        "private_key": private_key
     }
     reputation.new_identity(identity.did)
+    await save_identity(identity.did, public_key, private_key, created_at)
+
     return {
         "did": identity.did,
-        "public_key": identity.export_public_key()[:32] + "...",
-        "private_key": identity.private_key.private_bytes_raw().hex()[:32] + "..."
+        "public_key": public_key[:32] + "...",
+        "private_key": private_key[:32] + "..."
     }
 
 
@@ -57,12 +63,14 @@ def get_reputation(did: str):
 
 
 @identity_router.post("/reputation/{did}/increment")
-def increment_reputation(did: str, req: ReputationAction):
+async def increment_reputation(did: str, req: ReputationAction):
     reputation.increment(did, req.amount, req.reason)
+    await save_reputation_event(did, "increment", req.amount, req.reason, datetime.utcnow().isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
 
 
 @identity_router.post("/reputation/{did}/decrement")
-def decrement_reputation(did: str, req: ReputationAction):
+async def decrement_reputation(did: str, req: ReputationAction):
     reputation.decrement(did, req.amount, req.reason)
+    await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.utcnow().isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
