@@ -43,6 +43,11 @@ class VoteRequest(BaseModel):
 
 class TallyRequest(BaseModel):
     prop_id: str
+
+
+class ExecuteRequest(BaseModel):
+    prop_id: str
+    executor_did: str
     signature: str
     message: str
 
@@ -100,7 +105,6 @@ async def create_proposal(req: CreateProposalRequest):
 async def vote(req: VoteRequest):
     if not _verify_did(req.voter_did, req.message, req.signature):
         raise HTTPException(status_code=403, detail="Invalid voter signature")
-    # Compute voting power server-side from reputation
     from api.identity_routes import reputation
     voting_power = reputation.get_voting_power(req.voter_did)
     success = gov_engine.vote(req.prop_id, req.voter_did, req.support, voting_power)
@@ -112,7 +116,6 @@ async def vote(req: VoteRequest):
 
 @governance_router.post("/tally")
 async def tally(req: TallyRequest):
-    # Compute total voting power from all identities
     from api.identity_routes import reputation
     total_vp = sum(reputation.get_voting_power(did) for did in reputation.scores.keys())
     if total_vp == 0:
@@ -125,7 +128,9 @@ async def tally(req: TallyRequest):
 
 
 @governance_router.post("/execute/{prop_id}")
-async def execute(prop_id: str):
+async def execute(prop_id: str, req: ExecuteRequest):
+    if not _verify_did(req.executor_did, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid executor signature")
     success = gov_engine.execute(prop_id)
     if not success:
         raise HTTPException(status_code=400, detail="Cannot execute")
