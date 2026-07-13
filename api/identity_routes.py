@@ -20,6 +20,7 @@ class VerifyRequest(BaseModel):
 class ReputationAction(BaseModel):
     amount: float
     reason: str
+    authorized_by: str = None
 
 
 @identity_router.post("/did/create")
@@ -30,16 +31,16 @@ async def create_did():
     created_at = datetime.utcnow().isoformat()
 
     did_store[identity.did] = {
-        "public_key": public_key,
-        "private_key": private_key
+        "public_key": public_key
     }
     reputation.new_identity(identity.did)
-    await save_identity(identity.did, public_key, private_key, created_at)
+    await save_identity(identity.did, public_key, created_at)
 
     return {
         "did": identity.did,
-        "public_key": public_key[:32] + "...",
-        "private_key": private_key[:32] + "..."
+        "public_key": public_key,
+        "private_key": private_key,
+        "warning": "STORE THIS PRIVATE KEY SECURELY. It will NEVER be shown again and is NOT stored on the server."
     }
 
 

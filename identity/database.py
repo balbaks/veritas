@@ -10,7 +10,6 @@ async def init_identity_db():
             CREATE TABLE IF NOT EXISTS identities (
                 did TEXT PRIMARY KEY,
                 public_key TEXT,
-                private_key TEXT,
                 created_at TEXT
             )
         """)
@@ -28,11 +27,11 @@ async def init_identity_db():
         await db.commit()
 
 
-async def save_identity(did: str, public_key: str, private_key: str, created_at: str):
+async def save_identity(did: str, public_key: str, created_at: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT OR REPLACE INTO identities VALUES (?, ?, ?, ?)",
-            (did, public_key, private_key, created_at)
+            "INSERT OR REPLACE INTO identities VALUES (?, ?, ?)",
+            (did, public_key, created_at)
         )
         await db.commit()
 
@@ -54,8 +53,7 @@ async def load_identities():
         for row in rows:
             identities[row[0]] = {
                 "public_key": row[1],
-                "private_key": row[2],
-                "created_at": row[3]
+                "created_at": row[2]
             }
     return identities
 
