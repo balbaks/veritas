@@ -6,10 +6,12 @@ from api.identity_routes import identity_router
 from api.content_routes import content_router, registry
 from api.agent_routes import agent_router, agent_registry, delegation_manager
 from api.economic_routes import economic_router, economic_engine
+from api.governance_routes import governance_router, gov_engine, curation_engine
 from identity.database import init_identity_db, load_identities, load_reputation_events
 from content.database import init_content_db, load_contents
 from agents.database import init_agent_db, load_agents, load_delegations
 from economic.database import init_economic_db, load_economic_data
+from governance.database import init_governance_db, load_governance_data
 import api.identity_routes as identity_module
 import api.agent_routes as agent_module
 import api.economic_routes as economic_module
@@ -17,7 +19,7 @@ import api.economic_routes as economic_module
 agent_module.did_store_ref = identity_module.did_store
 economic_module.did_store_ref = identity_module.did_store
 
-app = FastAPI(title="VERITAS", version="0.9.1")
+app = FastAPI(title="VERITAS", version="1.0.0")
 engine = TrustEngine()
 
 
@@ -28,6 +30,7 @@ async def startup():
     await init_content_db()
     await init_agent_db()
     await init_economic_db()
+    await init_governance_db()
     engine.claims = await load_claims()
     engine.proofs = await load_proofs()
     loaded_identities = await load_identities()
@@ -39,12 +42,14 @@ async def startup():
     await load_agents(agent_registry)
     await load_delegations(delegation_manager)
     await load_economic_data(economic_engine)
+    await load_governance_data(gov_engine, curation_engine)
 
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 app.include_router(content_router, prefix="/content", tags=["Content"])
 app.include_router(agent_router, prefix="/agents", tags=["Agents"])
 app.include_router(economic_router, prefix="/economic", tags=["Economic"])
+app.include_router(governance_router, prefix="/governance", tags=["Governance"])
 
 
 class ClaimRequest(BaseModel):
@@ -64,11 +69,14 @@ class ProofRequest(BaseModel):
 def root():
     return {
         "protocol": "VERITAS",
+        "version": "1.0.0",
         "status": "operational",
         "claims": len(engine.claims),
         "identities": len(identity_module.did_store),
         "contents": len(registry.contents),
-        "agents": len(agent_registry.agents)
+        "agents": len(agent_registry.agents),
+        "proposals": len(gov_engine.proposals),
+        "arbiters": len(gov_engine.arbiters)
     }
 
 
