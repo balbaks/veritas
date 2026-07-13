@@ -71,6 +71,15 @@ async def save_delegation(del_data: dict):
         await db.commit()
 
 
+async def save_dispute(agent_id: str, details: str, filed_by: str, timestamp: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO agent_disputes (agent_id, details, filed_by, timestamp, resolved) VALUES (?, ?, ?, ?, 0)",
+            (agent_id, details, filed_by, timestamp)
+        )
+        await db.commit()
+
+
 async def load_agents(agent_registry: AgentRegistry):
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT * FROM agents")
@@ -83,6 +92,17 @@ async def load_agents(agent_registry: AgentRegistry):
                 "transactions_count": row[8], "successful_transactions": row[9],
                 "failed_transactions": row[10], "disputes": []
             }
+        cursor = await db.execute("SELECT * FROM agent_disputes ORDER BY timestamp")
+        dispute_rows = await cursor.fetchall()
+        for row in dispute_rows:
+            agent_id = row[1]
+            if agent_id in agent_registry.agents:
+                agent_registry.agents[agent_id]["disputes"].append({
+                    "details": row[2],
+                    "filed_by": row[3],
+                    "timestamp": row[4],
+                    "resolved": bool(row[5])
+                })
 
 
 async def load_delegations(delegation_manager: DelegationManager):

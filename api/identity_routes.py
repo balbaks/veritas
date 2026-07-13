@@ -20,8 +20,8 @@ class VerifyRequest(BaseModel):
 class ReputationAction(BaseModel):
     amount: float
     reason: str
-    signature: str = None
-    message: str = None
+    signature: str
+    message: str
 
 
 @identity_router.post("/did/create")
@@ -66,12 +66,12 @@ def get_reputation(did: str):
 
 @identity_router.post("/reputation/{did}/increment")
 async def increment_reputation(did: str, req: ReputationAction):
-    if req.signature and req.message:
-        pub_key = did_store.get(did, {}).get("public_key")
-        if pub_key:
-            valid = DID.verify(did, req.message, req.signature, pub_key)
-            if not valid:
-                raise HTTPException(status_code=403, detail="Invalid signature")
+    pub_key = did_store.get(did, {}).get("public_key")
+    if not pub_key:
+        raise HTTPException(status_code=404, detail="DID public key not found")
+    valid = DID.verify(did, req.message, req.signature, pub_key)
+    if not valid:
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
     reputation.increment(did, req.amount, req.reason)
     await save_reputation_event(did, "increment", req.amount, req.reason, datetime.utcnow().isoformat())
@@ -80,12 +80,12 @@ async def increment_reputation(did: str, req: ReputationAction):
 
 @identity_router.post("/reputation/{did}/decrement")
 async def decrement_reputation(did: str, req: ReputationAction):
-    if req.signature and req.message:
-        pub_key = did_store.get(did, {}).get("public_key")
-        if pub_key:
-            valid = DID.verify(did, req.message, req.signature, pub_key)
-            if not valid:
-                raise HTTPException(status_code=403, detail="Invalid signature")
+    pub_key = did_store.get(did, {}).get("public_key")
+    if not pub_key:
+        raise HTTPException(status_code=404, detail="DID public key not found")
+    valid = DID.verify(did, req.message, req.signature, pub_key)
+    if not valid:
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
     reputation.decrement(did, req.amount, req.reason)
     await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.utcnow().isoformat())

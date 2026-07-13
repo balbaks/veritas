@@ -2,11 +2,16 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from agents.registry import AgentRegistry
 from agents.delegation import DelegationManager
+from agents.database import save_dispute
+from identity.did import DID
+from datetime import datetime
 from typing import List, Optional
 
 agent_router = APIRouter()
 agent_registry = AgentRegistry()
 delegation_manager = DelegationManager()
+
+did_store_ref = None
 
 
 class RegisterAgentRequest(BaseModel):
@@ -14,18 +19,25 @@ class RegisterAgentRequest(BaseModel):
     agent_type: str
     capabilities: List[str]
     metadata: Optional[dict] = None
+    signature: str
+    message: str
 
 
 class TransactionRequest(BaseModel):
     agent_id: str
     success: bool
     details: str
+    authorized_by: str
+    signature: str
+    message: str
 
 
 class DisputeRequest(BaseModel):
     agent_id: str
     details: str
     filed_by: str
+    signature: str
+    message: str
 
 
 class DelegateRequest(BaseModel):
@@ -33,6 +45,8 @@ class DelegateRequest(BaseModel):
     agent_id: str
     permissions: List[str]
     duration_hours: int = 24
+    signature: str
+    message: str
 
 
 class LogActionRequest(BaseModel):
@@ -41,10 +55,27 @@ class LogActionRequest(BaseModel):
     details: str
 
 
+def _verify_did(did: str, message: str, signature: str) -> bool:
+    if did_store_ref is None:
+        return False
+    pub_key = did_store_ref.get(did, {}).get("public_key")
+    if not pub_key:
+        return False
+    return DID.verify(did, message, signature, pub_key)
+
+
 @agent_router.post("/register")
 def register_agent(req: RegisterAgentRequest):
-    agent_id = agent_registry.register(req.owner_did, req.agent_type, req.capabilities, req.metadata)
-    return {"agent_id": agent_id, "owner_did": req.owner_did, "agent_type": req.agent_type}
+    if not _verify_did(req.owner_did, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid owner signature")
+    agent_id = agent_registry.register(
+        req.owner_did, req.agent_type, req.capabilities, req.metadata
+    )
+    return {
+        "agent_id": agent_id,
+        "owner_did": req.owner_did,
+        "agent_type": req.agent_type
+    }
 
 
 @agent_router.get("/{agent_id}")
@@ -57,22 +88,44 @@ def get_agent(agent_id: str):
 
 @agent_router.post("/{agent_id}/transaction")
 def record_transaction(agent_id: str, req: TransactionRequest):
+    if not _verify_did(req.authorized_by, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
     agent_registry.record_transaction(agent_id, req.success, req.details)
     agent = agent_registry.get(agent_id)
-    return {"agent_id": agent_id, "trust_score": agent["trust_score"], "standing": agent_registry.get_standing(agent_id)}
+    return {
+        "agent_id": agent_id,
+        "trust_score": agent["trust_score"],
+        "standing": agent_registry.get_standing(agent_id)
+    }
 
 
 @agent_router.post("/{agent_id}/dispute")
-def file_dispute(agent_id: str, req: DisputeRequest):
+async def file_dispute(agent_id: str, req: DisputeRequest):
+    if not _verify_did(req.filed_by, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
     agent_registry.file_dispute(agent_id, req.details, req.filed_by)
+    await save_dispute(agent_id, req.details, req.filed_by, datetime.utcnow().isoformat())
     agent = agent_registry.get(agent_id)
-    return {"agent_id": agent_id, "trust_score": agent["trust_score"], "standing": agent_registry.get_standing(agent_id)}
+    return {
+        "agent_id": agent_id,
+        "trust_score": agent["trust_score"],
+        "standing": agent_registry.get_standing(agent_id)
+    }
 
 
 @agent_router.post("/delegate")
 def delegate(req: DelegateRequest):
-    del_id = delegation_manager.delegate(req.owner_did, req.agent_id, req.permissions, req.duration_hours)
-    return {"delegation_id": del_id, "owner_did": req.owner_did, "agent_id": req.agent_id, "expires_in_hours": req.duration_hours}
+    if not _verify_did(req.owner_did, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid owner signature")
+    del_id = delegation_manager.delegate(
+        req.owner_did, req.agent_id, req.permissions, req.duration_hours
+    )
+    return {
+        "delegation_id": del_id,
+        "owner_did": req.owner_did,
+        "agent_id": req.agent_id,
+        "expires_in_hours": req.duration_hours
+    }
 
 
 @agent_router.post("/delegate/{delegation_id}/revoke")

@@ -9,8 +9,12 @@ from identity.database import init_identity_db, load_identities, load_reputation
 from content.database import init_content_db, load_contents
 from agents.database import init_agent_db, load_agents, load_delegations
 import api.identity_routes as identity_module
+import api.agent_routes as agent_module
 
-app = FastAPI(title="VERITAS", version="0.8.0")
+# Wire did_store reference immediately
+agent_module.did_store_ref = identity_module.did_store
+
+app = FastAPI(title="VERITAS", version="0.8.2")
 engine = TrustEngine()
 
 
