@@ -1,0 +1,130 @@
+# ============================================================
+# LAYER 4: ECONOMIC TRUST — 100% FULL BUILD
+# ============================================================
+
+# ============================================
+# 20% — TRANSACTION ENGINE
+# ============================================
+cd /home/balbaks/Projects/veritas
+source venv/bin/activate
+mkdir -p economic
+touch economic/__init__.py
+nano economic/escrow.py
+# PASTE: EconomicEngine class (create_transaction, fund_escrow, release_escrow, file_dispute, resolve_dispute, get_transaction, get_escrow)
+python3 -c "
+from economic.escrow import EconomicEngine
+e = EconomicEngine()
+tx_id = e.create_transaction('did:veritas:alice', 'did:veritas:bob', 'agent_abc', 100.0, 'USDC', 'website_design')
+print(f'TX ID: {tx_id}')
+escrow_id = e.fund_escrow(tx_id)
+print(f'Escrow ID: {escrow_id}')
+print(f'Status: {e.get_transaction(tx_id)[\"status\"]}')
+e.release_escrow(escrow_id)
+print(f'After release: {e.get_transaction(tx_id)[\"status\"]}')
+tx2 = e.create_transaction('did:veritas:alice', 'did:veritas:carol', 'agent_xyz', 50.0, 'ETH', 'logo_design')
+escrow2 = e.fund_escrow(tx2)
+e.file_dispute(escrow2, 'did:veritas:alice', 'not_as_described', 'proof_hash_123')
+print(f'Dispute status: {e.get_transaction(tx2)[\"status\"]}')
+print(f'Dispute reason: {e.get_transaction(tx2)[\"dispute\"][\"reason\"]}')
+e.resolve_dispute(escrow2, True, 'did:veritas:mediator')
+print(f'After resolution: {e.get_transaction(tx2)[\"status\"]}')
+"
+git add .
+git commit -m "Layer 4 20%: Economic Engine — transactions, escrow, disputes, resolution"
+
+# ============================================
+# 40% — TRUST-WEIGHTED TRANSACTIONS
+# ============================================
+nano economic/trust_weight.py
+# PASTE: TrustWeightedEngine class (calculate_trust_multiplier, create_weighted_transaction)
+python3 -c "
+from economic.escrow import EconomicEngine
+from economic.trust_weight import TrustWeightedEngine
+from agents.registry import AgentRegistry
+from identity.reputation import ReputationRegistry
+econ = EconomicEngine()
+agents = AgentRegistry()
+rep = ReputationRegistry()
+rep.new_identity('did:veritas:alice')
+rep.increment('did:veritas:alice', 30, 'good_history')
+rep.new_identity('did:veritas:bob')
+rep.increment('did:veritas:bob', 20, 'reliable')
+agent_id = agents.register('did:veritas:alice', 'escrow_bot', ['trade'], {})
+agents.record_transaction(agent_id, True, 'test')
+agents.record_transaction(agent_id, True, 'test')
+tw = TrustWeightedEngine(econ, agents, rep)
+result = tw.create_weighted_transaction('did:veritas:alice', 'did:veritas:bob', agent_id, 500.0, 'USDC', 'consulting')
+print(f'TX ID: {result[\"tx_id\"]}')
+print(f'Multiplier: {result[\"trust\"][\"multiplier\"]}')
+print(f'Risk: {result[\"trust\"][\"risk_level\"]}')
+print(f'Recommended: {result[\"recommended\"]}')
+"
+git add .
+git commit -m "Layer 4 40%: Trust-Weighted Transactions — reputation-based risk scoring"
+
+# ============================================
+# 60% — ECONOMIC API
+# ============================================
+nano api/economic_routes.py
+# PASTE: economic_router with /transaction, /escrow/fund, /escrow/{id}/release, /escrow/{id}/dispute, /escrow/{id}/resolve, GET endpoints
+nano api/server.py
+# REPLACE ALL: add economic_router import and include_router, bump version
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -s -X POST http://localhost:8000/economic/transaction -H "Content-Type: application/json" -d '{"buyer_did":"did:veritas:alice","seller_did":"did:veritas:bob","agent_id":"agent_abc","amount":500.0,"currency":"USDC","description":"web_dev"}'
+TX_ID="paste-tx-id"
+curl -s -X POST http://localhost:8000/economic/escrow/fund -H "Content-Type: application/json" -d "{\"tx_id\":\"$TX_ID\"}"
+ESCROW_ID="paste-escrow-id"
+curl -s -X POST http://localhost:8000/economic/escrow/$ESCROW_ID/release
+curl -s http://localhost:8000/economic/transaction/$TX_ID
+git add .
+git commit -m "Layer 4 60%: Economic API — transactions, escrow, release, dispute, resolve"
+
+# ============================================
+# 80% — PERSISTENCE + AUTH + PARTY BINDING
+# ============================================
+nano economic/database.py
+# PASTE: init_economic_db, save_transaction, save_escrow, load_economic_data (with dispute persistence)
+nano api/economic_routes.py
+# REPLACE ALL: add auth (_verify_did), party binding on fund/release/dispute/resolve, async save calls
+nano api/server.py
+# REPLACE ALL: add economic DB init, did_store_ref wiring, version bump
+rm veritas.db
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+# Create DID
+curl -s -X POST http://localhost:8000/identity/did/create > /tmp/did.json
+# Create signed transaction
+python3 -c "
+import json
+from cryptography.hazmat.primitives.asymmetric import ed25519
+with open('/tmp/did.json') as f: data = json.load(f)
+did = data['did']
+private_key = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(data['private_key']))
+message = 'create:transaction:500:USDC'
+signature = private_key.sign(message.encode()).hex()
+import subprocess
+result = subprocess.run(['curl', '-s', '-X', 'POST', 'http://localhost:8000/economic/transaction', '-H', 'Content-Type: application/json', '-d', json.dumps({'buyer_did': did, 'seller_did': 'did:veritas:bob', 'agent_id': 'agent_abc', 'amount': 500.0, 'currency': 'USDC', 'description': 'web_dev', 'signature': signature, 'message': message})], capture_output=True, text=True)
+print(result.stdout)
+"
+# STOP SERVER (Ctrl+C)
+source venv/bin/activate
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -s http://localhost:8000/economic/transaction/paste-tx-id
+git add .
+git commit -m "Layer 4 80%: Economic persistence + auth + party binding"
+
+# ============================================
+# 100% — DOCKER + GITHUB PUSH
+# ============================================
+pip freeze > requirements.txt
+docker build -t veritas-node .
+sudo fuser -k 8000/tcp
+docker rm -f veritas-l1 veritas-l2 veritas-l3 veritas-test 2>/dev/null
+docker run -d -p 8000:8000 --name veritas-l4 veritas-node
+sleep 3
+curl http://localhost:8000/
+docker stop veritas-l4 && docker rm veritas-l4
+git add .
+git commit -m "Layer 4 100%: Economic Trust complete — escrow, disputes, auth, party binding, persistence, containerized"
+git push origin main

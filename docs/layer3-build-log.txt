@@ -1,0 +1,104 @@
+# ============================================================
+# LAYER 3: AGENT TRUST — 100% FULL BUILD
+# ============================================================
+
+# ============================================
+# 20% — AGENT IDENTITY & REGISTRATION
+# ============================================
+cd /home/balbaks/Projects/veritas
+source venv/bin/activate
+mkdir -p agents
+touch agents/__init__.py
+nano agents/registry.py
+# PASTE: AgentRegistry class (register, get, deactivate, record_transaction, file_dispute, _recalculate_trust, get_standing)
+python3 -c "
+from agents.registry import AgentRegistry
+r = AgentRegistry()
+agent_id = r.register('did:veritas:alice', 'trading_bot', ['trade', 'analyze'], {'model': 'gpt-5'})
+print(f'Agent ID: {agent_id}')
+r.record_transaction(agent_id, True, 'bought ETH at 3000')
+r.record_transaction(agent_id, True, 'sold ETH at 3100')
+r.record_transaction(agent_id, False, 'failed to execute limit order')
+r.record_transaction(agent_id, True, 'transferred USDC')
+agent = r.get(agent_id)
+print(f'Trust Score: {agent[\"trust_score\"]}')
+print(f'Standing: {r.get_standing(agent_id)}')
+print(f'Transactions: {agent[\"transactions_count\"]}, Success: {agent[\"successful_transactions\"]}, Failed: {agent[\"failed_transactions\"]}')
+r.file_dispute(agent_id, 'unauthorized trade', 'did:veritas:bob')
+print(f'After dispute - Trust Score: {r.get(agent_id)[\"trust_score\"]}')
+print(f'Standing: {r.get_standing(agent_id)}')
+"
+git add .
+git commit -m "Layer 3 20%: Agent Registry — registration, transactions, disputes, trust scoring"
+
+# ============================================
+# 40% — AGENT-HUMAN DELEGATION
+# ============================================
+nano agents/delegation.py
+# PASTE: DelegationManager class (delegate, revoke, check_permission, log_action, get_active_delegations, get_agent_delegations)
+python3 -c "
+from agents.delegation import DelegationManager
+d = DelegationManager()
+del_id = d.delegate('did:veritas:alice', 'agent_abc', ['trade', 'read_balance'], 48)
+print(f'Delegation ID: {del_id}')
+print(f'Can trade: {d.check_permission(\"agent_abc\", \"trade\")}')
+print(f'Can transfer: {d.check_permission(\"agent_abc\", \"transfer\")}')
+d.log_action(del_id, 'trade', 'bought ETH')
+print(f'Active delegations: {len(d.get_active_delegations(\"did:veritas:alice\"))}')
+d.revoke(del_id)
+print(f'After revoke - active: {len(d.get_active_delegations(\"did:veritas:alice\"))}')
+"
+git add .
+git commit -m "Layer 3 40%: Agent Delegation — permissions, time-bound, revoke, action logging"
+
+# ============================================
+# 60% — AGENT API ENDPOINTS
+# ============================================
+nano api/agent_routes.py
+# PASTE: FastAPI router with /register, /{agent_id}, /{agent_id}/transaction, /{agent_id}/dispute, /delegate, /delegate/{id}/revoke, /delegate/check, /delegate/log, /owner/{did}/delegations
+nano api/server.py
+# REPLACE ALL: add agent_router import, add app.include_router, bump version to 0.7.0, add agents count to root
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/agents/register -H "Content-Type: application/json" -d '{"owner_did":"did:veritas:alice","agent_type":"trading_bot","capabilities":["trade","analyze"],"metadata":{"model":"gpt-5"}}'
+AGENT="paste-returned-agent-id"
+curl -X POST http://localhost:8000/agents/$AGENT/transaction -H "Content-Type: application/json" -d "{\"agent_id\":\"$AGENT\",\"success\":true,\"details\":\"bought ETH\"}"
+curl -X POST http://localhost:8000/agents/$AGENT/transaction -H "Content-Type: application/json" -d "{\"agent_id\":\"$AGENT\",\"success\":true,\"details\":\"sold ETH\"}"
+curl -X POST http://localhost:8000/agents/$AGENT/transaction -H "Content-Type: application/json" -d "{\"agent_id\":\"$AGENT\",\"success\":false,\"details\":\"failed limit order\"}"
+curl http://localhost:8000/agents/$AGENT
+curl -X POST http://localhost:8000/agents/delegate -H "Content-Type: application/json" -d "{\"owner_did\":\"did:veritas:alice\",\"agent_id\":\"$AGENT\",\"permissions\":[\"trade\",\"read_balance\"],\"duration_hours\":48}"
+curl http://localhost:8000/agents/delegate/check/$AGENT/trade
+git add .
+git commit -m "Layer 3 60%: Agent API — register, transactions, disputes, delegation, permission checks"
+
+# ============================================
+# 80% — PERSISTENCE FOR AGENTS
+# ============================================
+nano agents/database.py
+# PASTE: init_agent_db, save_agent, save_delegation, load_agents, load_delegations
+nano api/server.py
+# REPLACE ALL: add agent DB init and loading in startup, bump version to 0.8.0, add agents count to root
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/agents/register -H "Content-Type: application/json" -d '{"owner_did":"did:veritas:alice","agent_type":"test_bot","capabilities":["test"],"metadata":{}}'
+# STOP SERVER (Ctrl+C)
+source venv/bin/activate
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl http://localhost:8000/agents/paste-agent-id-from-above
+git add .
+git commit -m "Layer 3 80%: Agent persistence — agents and delegations survive restart"
+
+# ============================================
+# 100% — DOCKER + GITHUB PUSH
+# ============================================
+pip freeze > requirements.txt
+docker build -t veritas-node .
+sudo fuser -k 8000/tcp
+docker rm -f veritas-l1 veritas-l2 veritas-test 2>/dev/null
+docker run -d -p 8000:8000 --name veritas-l3 veritas-node
+sleep 3
+curl http://localhost:8000/
+docker stop veritas-l3 && docker rm veritas-l3
+git add .
+git commit -m "Layer 3 100%: Agent Trust complete — registry, delegation, API, persistence, containerized"
+git push origin main
