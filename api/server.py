@@ -3,10 +3,11 @@ from pydantic import BaseModel
 from core.engine import TrustEngine
 from core.database import init_db, save_claim, save_proof, load_claims, load_proofs
 from api.identity_routes import identity_router
+from api.content_routes import content_router
 from identity.database import init_identity_db, load_identities, load_reputation_events
 import api.identity_routes as identity_module
 
-app = FastAPI(title="VERITAS", version="0.4.0")
+app = FastAPI(title="VERITAS", version="0.5.0")
 engine = TrustEngine()
 
 
@@ -22,7 +23,9 @@ async def startup():
         identity_module.reputation.new_identity(did)
     await load_reputation_events(identity_module.reputation)
 
+
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
+app.include_router(content_router, prefix="/content", tags=["Content"])
 
 
 class ClaimRequest(BaseModel):
