@@ -6,6 +6,7 @@ class ReputationRegistry:
     def __init__(self):
         self.scores: dict = {}
         self.history: dict = {}
+        self.stakes: dict = {}
 
     def new_identity(self, did: str):
         if did not in self.scores:
@@ -52,3 +53,15 @@ class ReputationRegistry:
             return "LOW"
         else:
             return "UNTRUSTWORTHY"
+
+    def stake(self, did: str, amount: float) -> bool:
+        if amount <= 0:
+            return False
+        self.stakes[did] = self.stakes.get(did, 0) + amount
+        self.increment(did, min(amount / 10, 20), "reputation_stake")
+        return True
+
+    def get_voting_power(self, did: str) -> float:
+        base_score = self.get_score(did) or 50.0
+        stake = self.stakes.get(did, 0)
+        return (base_score / 50.0) * (1 + stake / 100)

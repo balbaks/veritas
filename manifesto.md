@@ -1,39 +1,44 @@
-# VERITAS — The Trust Layer of the Internet
+# VERITAS — Verifiable Trust Infrastructure
 
-### A Verifiable Trust Protocol for the Post-Truth Age
+### Provenance, Identity, and Accountability for the Internet
 
 ---
 
 ## The Problem
 
-The internet is broken. Deepfakes, bot armies, AI-generated content, fake reviews, manipulated media. We no longer know what's real.
+The internet doesn't know what's real. Deepfakes, bot armies, AI-generated content, fake identities. Platforms decide what you trust — their algorithms, their interests.
 
-Platforms decide what you trust. Their algorithms. Their interests. Not yours.
+But here's what cryptography can actually do: prove who said something, prove it wasn't altered, prove when it was created. That's provenance, identity, and accountability.
 
-Trust should not be granted by corporations. It must be **mathematically provable** and **visually undeniable**.
+What it cannot do: prove a claim is true. Truth requires human judgment. VERITAS doesn't replace judgment — it gives judgment verifiable evidence to work with.
 
 ---
 
-## The Solution
+## What VERITAS Does
 
-**VERITAS** is a trust protocol that sits beneath the internet — a new layer of reality.
+**VERITAS is a trust protocol that makes provenance, identity, and attestation cryptographically verifiable.**
 
-It assigns every piece of digital content a **Verifiable Trust Score** backed by cryptographic proofs, not authority.
+- **Who** made this claim? (Identity)
+- **When** was it made? (Timestamping)
+- **Has it been altered?** (Content hashing)
+- **Who else attests to it?** (Proof aggregation)
+- **What's their reputation?** (Verifiable history)
 
-Anyone can submit a claim. Anyone can submit proof. The protocol evaluates truth independently.
-
-No central authority. No platform dependency. Just math.
+The system doesn't tell you what's true. It tells you what's proven, what's attested, and by whom — so you can decide.
 
 ---
 
 ## How It Works
 
-Submit Claim -> Gather Proofs -> Evaluate Trust -> Verdict
+Create Identity -> Register Content -> Gather Attestations -> Evaluate Evidence
 
-- **Claims** — statements, content, identities
-- **Proofs** — cryptographic signatures, hash matches, attestations, ZK proofs
-- **Trust Scores** — 0 to 100, with confidence levels
-- **Verdicts** — VERIFIED, LIKELY_TRUE, UNVERIFIED, SUSPICIOUS, DISPROVEN
+- **DIDs** — Self-sovereign identity with Ed25519 keys
+- **Content Registry** — Hash content, track provenance, edit chains
+- **Proof Engine** — Cryptographic verification of attestations
+- **Reputation** — Verifiable history with Sybil-resistant staking
+- **Agents** — AI agents with delegated authority and track records
+- **Escrow** — Trust-weighted transactions with dispute resolution
+- **Governance** — Community voting, arbiter election, parameter control
 
 ---
 
@@ -41,31 +46,32 @@ Submit Claim -> Gather Proofs -> Evaluate Trust -> Verdict
 
 | Layer | Name | Status |
 |-------|------|--------|
-| 0 | Trust Inversion Protocol (TIPC) | Live |
-| 1 | Identity & Reputation | Next |
-| 2 | Content Authenticity | Planned |
-| 3 | Agent Trust (AI reputation) | Planned |
-| 4 | Economic Trust | Planned |
-| 5 | Governance & Curation | Planned |
+| 0 | Trust Protocol Core | Live |
+| 1 | Identity & Reputation | Live |
+| 2 | Content Provenance | Live |
+| 3 | Agent Trust | Live |
+| 4 | Economic Trust | Live |
+| 5 | Governance & Curation | Live |
 
 ---
 
-## Layer 0 — Trust Inversion Protocol (Current)
+## What VERITAS Does NOT Do
 
-Working now:
-- Submit claims with subject, predicate, content
-- Submit proofs from multiple verifiers
-- Evaluate trust scores with confidence levels
-- SQLite persistence (survives restarts)
-- REST API (FastAPI + OpenAPI docs)
-- Docker containerized
+- **It does not determine truth.** "Well-attested" means many independent sources verified the provenance — not that the claim is factually correct.
+- **It does not detect AI content.** Detection is an arms race the detectors are losing. VERITAS focuses on positive provenance: signed-at-creation, verified creator, unaltered content.
+- **It does not eliminate human judgment.** Disputes require arbiters. Governance requires votes. The protocol makes these processes transparent and auditable, not automatic.
 
-API Endpoints:
-- GET  /                          — Protocol status
-- POST /claim                     — Submit a claim
-- POST /proof                     — Submit a proof
-- GET  /trust?claim_id=<id>       — Evaluate trust score
-- GET  /docs                      — Interactive API documentation
+---
+
+## Known Challenges
+
+**Sybil attacks:** Free identity creation enables reputation farming. Our approach: bootstrapping with a narrow scope (AI agents first), combined with reputation staking and web-of-trust weighting. Not solved — being built in the open.
+
+**The oracle problem:** Cryptography verifies provenance, not truth. We're explicit about this. The system provides verifiable evidence; humans provide judgment.
+
+**Cold start:** Trust scores need users, users need trust scores. Our wedge: AI agent ecosystems being born right now without incumbent trust infrastructure.
+
+**Governance is the product:** Who resolves disputes? Who elects arbiters? These aren't Layer 5 add-ons — they're the core. Built in from day one.
 
 ---
 
@@ -73,34 +79,19 @@ API Endpoints:
 
 git clone https://github.com/balbaks/veritas.git
 cd veritas
-docker build -t veritas-node .
-docker run -d -p 8000:8000 veritas-node
-curl http://localhost:8000/
+pip install -r requirements.txt
+uvicorn api.server:app --reload --port 8000
 
----
-
-## The Vision
-
-In 5-10 years, VERITAS becomes the trust substrate of the internet.
-
-- Every social media platform plugs into it
-- Every AI agent checks it before acting
-- Every news article carries a live trust badge
-- Every identity carries verifiable reputation
-- Every transaction knows the trustworthiness of the counterparty
-
-This is not a product. This is infrastructure. A public good. A new layer of reality.
+Interactive docs: http://localhost:8000/docs
 
 ---
 
 ## Built By
 
-One person. A PC. Ubuntu. AI. And the conviction that trust should be provable, not granted.
+One person. A PC. Ubuntu. AI collaboration. And the conviction that trust should be verifiable, not granted.
 
 ---
 
 ## Status
 
-Layer 0: Operational. Layer 1: Coming.
-
-This is the basement. The cathedral rises from here.
+**v1.1.0 — All 5 layers operational. Building in the open.**

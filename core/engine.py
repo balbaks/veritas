@@ -58,7 +58,7 @@ class TrustEngine:
         if invalid_count > 0 and proof_count == 0:
             return TrustVerdict(
                 claim_id=claim_id,
-                score=TrustScore.SUSPICIOUS,
+                score=TrustScore.CONTRADICTED,
                 confidence=0.1,
                 proof_count=0,
                 source_count=0,
@@ -76,19 +76,19 @@ class TrustEngine:
             )
 
         if proof_count >= 3 and source_count >= 2:
-            score = TrustScore.VERIFIED
+            score = TrustScore.WELL_ATTESTED
             confidence = 0.95
         elif proof_count >= 2:
-            score = TrustScore.LIKELY_TRUE
+            score = TrustScore.LIKELY_AUTHENTIC
             confidence = 0.75
         elif proof_count == 1:
             score = TrustScore.UNVERIFIED
             confidence = 0.4
         else:
-            score = TrustScore.SUSPICIOUS
+            score = TrustScore.POORLY_ATTESTED
             confidence = 0.2
 
-        explanation = f"Score based on {proof_count} valid proofs from {source_count} independent sources."
+        explanation = f"Evidence based on {proof_count} valid attestations from {source_count} independent sources."
         if invalid_count > 0:
             explanation += f" ({invalid_count} invalid proofs rejected.)"
 

@@ -43,8 +43,7 @@ async def register_content(
         "size": len(content_bytes),
         "mime_type": mime_type,
         "creator_did": creator_did,
-        "ai_score": analysis["ai_generated_score"],
-        "likely_ai": analysis["likely_ai"]
+        "provenance_recorded": True
     }
 
 
@@ -67,10 +66,3 @@ async def add_edit(req: EditRequest):
     registry.add_edit(req.content_hash, req.editor_did, req.new_hash, req.edit_type)
     await save_edit(req.content_hash, req.editor_did, req.new_hash, req.edit_type, datetime.utcnow().isoformat())
     return {"content_hash": req.content_hash, "edit_type": req.edit_type, "editor": req.editor_did}
-
-
-@content_router.post("/detect")
-async def detect_ai(data: UploadFile = File(...)):
-    content_bytes = await data.read()
-    analysis = detector.analyze(content_bytes, data.content_type or "text/plain")
-    return analysis

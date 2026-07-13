@@ -7,28 +7,28 @@ import json
 
 
 class TrustScore(Enum):
-    VERIFIED = 100
-    LIKELY_TRUE = 75
+    WELL_ATTESTED = 100
+    LIKELY_AUTHENTIC = 75
     UNVERIFIED = 50
-    SUSPICIOUS = 25
-    DISPROVEN = 0
+    POORLY_ATTESTED = 25
+    CONTRADICTED = 0
 
 
 @dataclass
 class Claim:
     id: str
-    subject: str        # Who or what this claim is about
-    predicate: str      # What is being claimed
-    content_hash: str   # Hash of the actual content
+    subject: str
+    predicate: str
+    content_hash: str
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
 @dataclass
 class Proof:
     claim_id: str
-    proof_type: str     # "signature", "hash_match", "zk_proof", "attestation"
-    proof_data: str     # The actual proof payload
-    verifier: str       # Who or what verified it
+    proof_type: str
+    proof_data: str
+    verifier: str
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
@@ -36,7 +36,7 @@ class Proof:
 class TrustVerdict:
     claim_id: str
     score: TrustScore
-    confidence: float   # 0.0 to 1.0
+    confidence: float
     proof_count: int
     source_count: int
     explanation: str
