@@ -64,7 +64,7 @@ class ReputationRegistry:
     def get_voting_power(self, did: str) -> float:
         base_score = self.get_score(did) or 50.0
         stake = self.stakes.get(did, 0)
-        return (base_score / 50.0) * (1 + stake / 100)
+        return (base_score / 50.0) * (1 + (stake ** 0.5) / 10)
 
     def slash_stake(self, did: str, amount: float, authorized_by: str, arbiter_check: Callable) -> bool:
         if not arbiter_check(authorized_by):

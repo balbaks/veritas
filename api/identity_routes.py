@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from identity.did import DID
 from identity.reputation import ReputationRegistry
-from identity.database import save_identity, save_reputation_event
+from identity.database import save_identity, save_reputation_event, save_stake
 from datetime import datetime
 
 identity_router = APIRouter()
@@ -20,6 +20,13 @@ class VerifyRequest(BaseModel):
 class ReputationAction(BaseModel):
     amount: float
     reason: str
+    signature: str
+    message: str
+
+
+class StakeRequest(BaseModel):
+    did: str
+    amount: float
     signature: str
     message: str
 
@@ -60,7 +67,8 @@ def get_reputation(did: str):
         "did": did,
         "score": score,
         "standing": reputation.get_standing(did),
-        "history": reputation.get_history(did)
+        "history": reputation.get_history(did),
+        "staked": reputation.stakes.get(did, 0)
     }
 
 
@@ -90,3 +98,18 @@ async def decrement_reputation(did: str, req: ReputationAction):
     reputation.decrement(did, req.amount, req.reason)
     await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.utcnow().isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
+
+
+@identity_router.post("/stake")
+async def stake(req: StakeRequest):
+    pub_key = did_store.get(req.did, {}).get("public_key")
+    if not pub_key:
+        raise HTTPException(status_code=404, detail="DID not found")
+    valid = DID.verify(req.did, req.message, req.signature, pub_key)
+    if not valid:
+        raise HTTPException(status_code=403, detail="Invalid signature")
+    success = reputation.stake(req.did, req.amount)
+    if not success:
+        raise HTTPException(status_code=400, detail="Stake amount must be positive")
+    await save_stake(req.did, reputation.stakes.get(req.did, 0))
+    return {"did": req.did, "staked": req.amount, "total_staked": reputation.stakes.get(req.did, 0)}

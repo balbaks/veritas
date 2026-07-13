@@ -24,6 +24,13 @@ async def init_identity_db():
                 FOREIGN KEY (did) REFERENCES identities(did)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS stakes (
+                did TEXT PRIMARY KEY,
+                amount REAL,
+                FOREIGN KEY (did) REFERENCES identities(did)
+            )
+        """)
         await db.commit()
 
 
@@ -41,6 +48,15 @@ async def save_reputation_event(did: str, action: str, amount: float, reason: st
         await db.execute(
             "INSERT INTO reputation_events (did, action, amount, reason, timestamp) VALUES (?, ?, ?, ?, ?)",
             (did, action, amount, reason, timestamp)
+        )
+        await db.commit()
+
+
+async def save_stake(did: str, amount: float):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO stakes VALUES (?, ?)",
+            (did, amount)
         )
         await db.commit()
 
@@ -68,3 +84,11 @@ async def load_reputation_events(rep_registry: ReputationRegistry):
                 rep_registry.increment(did, amount, reason)
             elif action == "decrement":
                 rep_registry.decrement(did, amount, reason)
+
+
+async def load_stakes(rep_registry: ReputationRegistry):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT * FROM stakes")
+        rows = await cursor.fetchall()
+        for row in rows:
+            rep_registry.stakes[row[0]] = row[1]
