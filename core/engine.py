@@ -62,7 +62,7 @@ class TrustEngine:
                 confidence=0.1,
                 proof_count=0,
                 source_count=0,
-                explanation=f"All {invalid_count} proofs failed validation."
+                explanation="Conflicting attestations exist. The protocol reports disagreement among verifiers — not a determination of falsehood. The underlying claim may still be true."
             )
 
         if proof_count == 0:

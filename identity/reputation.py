@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Callable
 
 
 class ReputationRegistry:
@@ -65,3 +65,12 @@ class ReputationRegistry:
         base_score = self.get_score(did) or 50.0
         stake = self.stakes.get(did, 0)
         return (base_score / 50.0) * (1 + stake / 100)
+
+    def slash_stake(self, did: str, amount: float, authorized_by: str, arbiter_check: Callable) -> bool:
+        if not arbiter_check(authorized_by):
+            return False
+        if did not in self.stakes or self.stakes[did] < amount:
+            return False
+        self.stakes[did] -= amount
+        self.decrement(did, amount / 5, f"stake_slashed_by_{authorized_by}")
+        return True
