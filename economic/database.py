@@ -22,6 +22,15 @@ async def init_economic_db():
             )
         """)
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS transaction_disputes (
+                tx_id TEXT PRIMARY KEY,
+                filed_by TEXT,
+                reason TEXT,
+                proof_hash TEXT,
+                filed_at TEXT
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS escrows (
                 escrow_id TEXT PRIMARY KEY,
                 tx_id TEXT,
@@ -49,6 +58,15 @@ async def save_transaction(tx: dict):
         )
         await db.commit()
 
+    if tx.get("dispute"):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO transaction_disputes (tx_id, filed_by, reason, proof_hash, filed_at) VALUES (?, ?, ?, ?, ?)",
+                (tx["tx_id"], tx["dispute"]["filed_by"], tx["dispute"]["reason"],
+                 tx["dispute"]["proof_hash"], tx["dispute"]["filed_at"])
+            )
+            await db.commit()
+
 
 async def save_escrow(escrow: dict):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -73,6 +91,17 @@ async def load_economic_data(engine: EconomicEngine):
                 "description": row[6], "created_at": row[7], "status": row[8],
                 "escrow_id": row[9], "proofs": [], "dispute": None
             }
+        cursor = await db.execute("SELECT * FROM transaction_disputes")
+        rows = await cursor.fetchall()
+        for row in rows:
+            tx_id = row[0]
+            if tx_id in engine.transactions:
+                engine.transactions[tx_id]["dispute"] = {
+                    "filed_by": row[1],
+                    "reason": row[2],
+                    "proof_hash": row[3],
+                    "filed_at": row[4]
+                }
         cursor = await db.execute("SELECT * FROM escrows")
         rows = await cursor.fetchall()
         for row in rows:
