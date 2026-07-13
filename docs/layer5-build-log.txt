@@ -1,0 +1,101 @@
+# ============================================================
+# LAYER 5: GOVERNANCE & CURATION — 100% FULL BUILD
+# ============================================================
+
+# ============================================
+# 20% — PROPOSAL ENGINE
+# ============================================
+cd /home/balbaks/Projects/veritas
+source venv/bin/activate
+mkdir -p governance
+touch governance/__init__.py
+nano governance/proposals.py
+# PASTE: GovernanceEngine class (create_proposal, vote, tally, execute, get_proposal, get_parameters, get_arbiters, is_arbiter)
+python3 -c "
+from governance.proposals import GovernanceEngine, ProposalType
+g = GovernanceEngine()
+prop_id = g.create_proposal('did:veritas:alice', 'Increase threshold', 'Raise trust threshold to 70', ProposalType.PARAMETER_CHANGE, {'trust_threshold': 70})
+print(f'Proposal ID: {prop_id}')
+g.vote(prop_id, 'did:veritas:alice', True, 15)
+g.vote(prop_id, 'did:veritas:bob', True, 10)
+g.vote(prop_id, 'did:veritas:carol', False, 3)
+result = g.tally(prop_id, 100)
+print(f'Result: {result}')
+prop2 = g.create_proposal('did:veritas:alice', 'Elect arbiter', 'Elect bob as arbiter', ProposalType.ARBITER_ELECTION, {'arbiter_did': 'did:veritas:bob'})
+g.vote(prop2, 'did:veritas:alice', True, 25)
+g.tally(prop2, 100)
+g.execute(prop2)
+print(f'Is bob arbiter: {g.is_arbiter(\"did:veritas:bob\")}')
+"
+git add .
+git commit -m "Layer 5 20%: Governance Engine — proposals, voting, quorum, arbiter election, parameter changes"
+
+# ============================================
+# 40% — CURATION ENGINE
+# ============================================
+nano governance/curation.py
+# PASTE: CurationEngine class (create_list, add_curator, add_item, verify_item, reject_item, get_curation_score, get_list, get_lists_by_owner)
+python3 -c "
+from governance.curation import CurationEngine
+c = CurationEngine()
+list_id = c.create_list('did:veritas:alice', 'Trusted News', 'Verified news sources')
+c.add_item(list_id, 'hash_abc123', 'did:veritas:alice', 'reputable source')
+c.add_curator(list_id, 'did:veritas:bob', 'did:veritas:alice')
+c.verify_item(list_id, 'hash_abc123', 'did:veritas:bob')
+c.verify_item(list_id, 'hash_abc123', 'did:veritas:carol')
+c.reject_item(list_id, 'hash_abc123', 'did:veritas:dave')
+print(f'Score: {c.get_curation_score(list_id, \"hash_abc123\")}')
+print(f'Items: {len(c.get_list(list_id)[\"items\"])}')
+"
+git add .
+git commit -m "Layer 5 40%: Curation Engine — curated lists, multi-curator, verify/reject, scoring"
+
+# ============================================
+# 60% — GOVERNANCE API
+# ============================================
+nano api/governance_routes.py
+# PASTE: governance_router with /proposal, /vote, /tally, /execute, /parameters, /arbiters, /curation/*
+nano api/server.py
+# REPLACE ALL: add governance_router import and include_router, bump version to 1.0.0
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -s -X POST http://localhost:8000/governance/proposal -H "Content-Type: application/json" -d '{"proposer_did":"did:veritas:alice","title":"Test","description":"A test","proposal_type":"general"}'
+curl -s http://localhost:8000/governance/parameters
+curl -s -X POST http://localhost:8000/governance/curation/list -H "Content-Type: application/json" -d '{"owner_did":"did:veritas:alice","name":"Trusted","description":"Verified"}'
+git add .
+git commit -m "Layer 5 60%: Governance API — proposals, voting, tally, curation lists, verify/reject"
+
+# ============================================
+# 80% — PERSISTENCE
+# ============================================
+nano governance/database.py
+# PASTE: init_governance_db, save_proposal, save_arbiter, save_curated_list, load_governance_data
+nano api/governance_routes.py
+# REPLACE ALL: add async save calls for proposal, vote, execute, curation actions
+nano api/server.py
+# REPLACE ALL: add governance DB init and loading in startup
+rm veritas.db
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -s -X POST http://localhost:8000/governance/proposal -H "Content-Type: application/json" -d '{"proposer_did":"did:veritas:alice","title":"Persist Test","description":"Test persistence","proposal_type":"general"}'
+# STOP SERVER (Ctrl+C)
+source venv/bin/activate
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -s http://localhost:8000/governance/proposal/paste-prop-id
+git add .
+git commit -m "Layer 5 80%: Governance persistence — proposals, arbiters, curation lists survive restart"
+
+# ============================================
+# 100% — DOCKER + GITHUB PUSH
+# ============================================
+pip freeze > requirements.txt
+docker build -t veritas-node .
+sudo fuser -k 8000/tcp
+docker rm -f veritas-l1 veritas-l2 veritas-l3 veritas-l4 veritas-l5 2>/dev/null
+docker run -d -p 8000:8000 --name veritas-l5 veritas-node
+sleep 3
+curl http://localhost:8000/
+docker stop veritas-l5 && docker rm veritas-l5
+git add .
+git commit -m "Layer 5 100%: Governance & Curation complete — proposals, voting, arbiters, curation, persistence, containerized. v1.0.0"
+git push origin main
