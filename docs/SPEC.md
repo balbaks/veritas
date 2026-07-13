@@ -1,4 +1,4 @@
-# VERITAS Protocol Specification v1.1.2
+# VERITAS Protocol Specification v1.1.3
 
 ## Abstract
 
@@ -68,9 +68,9 @@ Square-root dampening prevents linear wealth dominance.
 
 ## 6. Content Provenance
 
-Registration: content_bytes + mime_type + creator_did + metadata → SHA256 hash.
-Edit chain: editor_did, new_hash, edit_type, timestamp per edit.
-Origin verification: claimed creator matches registered creator.
+Registration: content_bytes + mime_type + creator_did + metadata → SHA256 hash. Creator must provide valid Ed25519 signature.
+Edit chain: editor_did, new_hash, edit_type, timestamp per edit. Editor must provide valid Ed25519 signature.
+Origin verification: claimed creator matches registered creator. Requires creator signature.
 Provenance record: hash, creator, timestamp, origin status, edit count, edit chain.
 AI detection: internal only, not exposed as a feature.
 
@@ -96,7 +96,7 @@ Proposals: parameter_change, arbiter_election, protocol_upgrade, dispute_resolut
 
 Voting: cryptographically signed, server-side voting power computation, one vote per DID per proposal.
 
-Tally: total voting power from all registered identities. Passes if votes_for > votes_against AND participation ≥ quorum.
+Tally: total voting power from all registered identities. Passes if votes_for > votes_against AND participation ≥ quorum. Open endpoint — anyone can trigger.
 
 Arbiter Election & Slashing: elected via governance proposals. Only elected arbiters can trigger slash_stake().
 
@@ -106,16 +106,20 @@ Governable parameters: trust_threshold, dispute_timeout_hours, arbiter_count, vo
 
 ## 9. Agent Model
 
-Registration: owner_did + agent_type + capabilities + metadata.
+Registration: owner_did + agent_type + capabilities + metadata. Owner must provide valid Ed25519 signature.
 Trust score: starts 50.0. (successful/total)*100 - (unresolved_disputes*5).
 Delegation: time-bound (default 24h), permission-scoped, revocable, action-logged.
 Transaction authorization: only owner or entity with active delegation can record agent transactions.
 
 ---
 
-### 10.3 Trust-Weighted Transactions (Future)
+## 10. Economic Model
 
-The economic layer currently handles escrow state transitions with party binding. Trust-weighted risk scoring based on buyer, seller, and agent reputation scores is specified but not yet implemented in the reference implementation. See economic/trust_weight.py for the planned interface.
+Escrow state machine: PENDING → FUNDED → RELEASED (completed) or DISPUTED → RESOLVED_BUYER (refunded) or RESOLVED_SELLER (completed).
+
+Party binding: only buyer can fund, only seller can release, only buyer/seller can dispute or resolve.
+
+Trust-Weighted Transactions (Future): The economic layer currently handles escrow state transitions with party binding. Trust-weighted risk scoring based on buyer, seller, and agent reputation scores is specified but not yet implemented in the reference implementation. See economic/trust_weight.py for the planned interface.
 
 ---
 
@@ -139,6 +143,9 @@ The protocol requires survival across restarts for: claims, proofs, identities (
 
 | Endpoint | Auth Required |
 |----------|---------------|
+| POST /content/register | ✅ Creator DID signature |
+| POST /content/edit | ✅ Editor DID signature |
+| POST /content/verify-origin | ✅ Creator DID signature |
 | POST /identity/reputation/{did}/increment | ✅ DID signature |
 | POST /identity/reputation/{did}/decrement | ✅ DID signature |
 | POST /identity/stake | ✅ DID signature |
@@ -170,25 +177,17 @@ The protocol requires survival across restarts for: claims, proofs, identities (
 | POST /identity/did/create | Identity creation — keys returned once, never stored |
 | POST /governance/tally | Read-only computation — anyone can trigger a tally |
 
-### 13.3 Endpoints Requiring Auth (not yet implemented)
-
-| Endpoint | Issue |
-|----------|-------|
-| POST /content/register | creator_did is a freeform field — anyone can register content under any DID |
-| POST /content/edit | editor_did is a freeform field — anyone can record edits to any content |
-| POST /content/verify-origin | No signature required — anyone can claim to verify origin |
-
-These are documented gaps. The content layer needs the same signature verification pattern as the identity, agent, economic, and governance layers.
-
-### 13.4 Read Endpoints
+### 13.3 Read Endpoints
 
 All GET endpoints are open. No authentication required.
 
-### 13.5 Error Responses
+### 13.4 Error Responses
 
 - `403`: Invalid signature or unauthorized
 - `404`: Resource not found
 - `400`: Invalid request or state transition
+
+---
 
 ## 14. Threat Model
 
@@ -204,5 +203,6 @@ v1.0.0: Initial 5-layer protocol
 v1.1.0: Honest labels, Sybil staking, AI detection removed from API
 v1.1.1: Governance auth, server-side voting power, sqrt damping
 v1.1.2: Execute auth, tally cleanup
+v1.1.3: Content auth (register/edit/verify-origin), SPEC accuracy
 
 Reference implementation: github.com/balbaks/veritas — Python 3.12, FastAPI, SQLite, Docker, MIT license.
