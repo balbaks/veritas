@@ -16,12 +16,14 @@ import api.identity_routes as identity_module
 import api.agent_routes as agent_module
 import api.economic_routes as economic_module
 import api.governance_routes as governance_module
+import api.content_routes as content_module
 
 agent_module.did_store_ref = identity_module.did_store
 economic_module.did_store_ref = identity_module.did_store
 governance_module.did_store_ref = identity_module.did_store
+content_module.did_store_ref = identity_module.did_store
 
-app = FastAPI(title="VERITAS", version="1.1.1")
+app = FastAPI(title="VERITAS", version="1.1.3")
 engine = TrustEngine()
 
 
@@ -72,7 +74,7 @@ class ProofRequest(BaseModel):
 def root():
     return {
         "protocol": "VERITAS",
-        "version": "1.1.1",
+        "version": "1.1.3",
         "status": "operational",
         "claims": len(engine.claims),
         "identities": len(identity_module.did_store),

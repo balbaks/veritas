@@ -113,13 +113,9 @@ Transaction authorization: only owner or entity with active delegation can recor
 
 ---
 
-## 10. Economic Model
+### 10.3 Trust-Weighted Transactions (Future)
 
-Escrow state machine: PENDING → FUNDED → RELEASED (completed) or DISPUTED → RESOLVED_BUYER (refunded) or RESOLVED_SELLER (completed).
-
-Party binding: only buyer can fund, only seller can release, only buyer/seller can dispute or resolve.
-
-Trust-weighted transactions: average of buyer, seller, and agent scores determines LOW (≥70), MEDIUM (≥40), or HIGH (<40) risk.
+The economic layer currently handles escrow state transitions with party binding. Trust-weighted risk scoring based on buyer, seller, and agent reputation scores is specified but not yet implemented in the reference implementation. See economic/trust_weight.py for the planned interface.
 
 ---
 
@@ -139,11 +135,60 @@ The protocol requires survival across restarts for: claims, proofs, identities (
 
 ## 13. API Conventions
 
-Authentication: all state-changing endpoints require Ed25519 signature + message. Server verifies against DID public key.
-Read endpoints: open, no auth required.
-Errors: 403 (unauthorized/invalid sig), 404 (not found), 400 (invalid state transition).
+### 13.1 Authenticated Endpoints (require Ed25519 signature + message)
 
----
+| Endpoint | Auth Required |
+|----------|---------------|
+| POST /identity/reputation/{did}/increment | ✅ DID signature |
+| POST /identity/reputation/{did}/decrement | ✅ DID signature |
+| POST /identity/stake | ✅ DID signature |
+| POST /agents/register | ✅ Owner DID signature |
+| POST /agents/{id}/transaction | ✅ Authorized DID signature |
+| POST /agents/{id}/dispute | ✅ Filer DID signature |
+| POST /agents/delegate | ✅ Owner DID signature |
+| POST /agents/delegate/{id}/revoke | ✅ Owner DID signature |
+| POST /economic/transaction | ✅ Buyer DID signature |
+| POST /economic/escrow/fund | ✅ Buyer DID signature |
+| POST /economic/escrow/{id}/release | ✅ Seller DID signature |
+| POST /economic/escrow/{id}/dispute | ✅ Party DID signature |
+| POST /economic/escrow/{id}/resolve | ✅ Party DID signature |
+| POST /governance/proposal | ✅ Proposer DID signature |
+| POST /governance/vote | ✅ Voter DID signature |
+| POST /governance/execute/{id} | ✅ Executor DID signature |
+| POST /governance/curation/list | ✅ Owner DID signature |
+| POST /governance/curation/curator | ✅ Added-by DID signature |
+| POST /governance/curation/item | ✅ Curator DID signature |
+| POST /governance/curation/verify | ✅ Curator DID signature |
+| POST /governance/curation/reject | ✅ Curator DID signature |
+
+### 13.2 Open Endpoints (no auth by design)
+
+| Endpoint | Reason |
+|----------|--------|
+| POST /claim | Open attestation — anyone can submit a claim |
+| POST /proof | Open attestation — anyone can submit a proof |
+| POST /identity/did/create | Identity creation — keys returned once, never stored |
+| POST /governance/tally | Read-only computation — anyone can trigger a tally |
+
+### 13.3 Endpoints Requiring Auth (not yet implemented)
+
+| Endpoint | Issue |
+|----------|-------|
+| POST /content/register | creator_did is a freeform field — anyone can register content under any DID |
+| POST /content/edit | editor_did is a freeform field — anyone can record edits to any content |
+| POST /content/verify-origin | No signature required — anyone can claim to verify origin |
+
+These are documented gaps. The content layer needs the same signature verification pattern as the identity, agent, economic, and governance layers.
+
+### 13.4 Read Endpoints
+
+All GET endpoints are open. No authentication required.
+
+### 13.5 Error Responses
+
+- `403`: Invalid signature or unauthorized
+- `404`: Resource not found
+- `400`: Invalid request or state transition
 
 ## 14. Threat Model
 
