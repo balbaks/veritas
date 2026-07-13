@@ -1,0 +1,111 @@
+# ============================================================
+# LAYER 0: TRUST INVERSION PROTOCOL (TIPC) — 100% FULL BUILD
+# ============================================================
+
+# ============================================
+# 20% — FOUNDATION
+# ============================================
+cd /home/balbaks/Projects
+mkdir veritas
+cd veritas
+git init
+git branch -m main
+python3 -m venv venv
+source venv/bin/activate
+mkdir -p core proofs identity api tests docs
+touch manifesto.md README.md
+touch core/__init__.py core/models.py
+touch proofs/__init__.py
+touch identity/__init__.py
+touch api/__init__.py
+touch tests/__init__.py
+echo "venv/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+git add .
+git commit -m "Phase 1: Foundation — VERITAS project skeleton initialized"
+
+# ============================================
+# 40% — PROOF ENGINE
+# ============================================
+nano core/models.py
+# PASTE: Claim, Proof, TrustVerdict, TrustScore
+nano core/engine.py
+# PASTE: TrustEngine class
+python3 -c "
+from core.engine import TrustEngine
+e = TrustEngine()
+claim = e.submit_claim('user123', 'says hello', 'hello world')
+print(f'Claim ID: {claim.id}')
+verdict = e.evaluate(claim.id)
+print(f'No proofs: {verdict.score.name} ({verdict.confidence})')
+e.submit_proof(claim.id, 'hash_match', claim.content_hash, 'verifierA')
+e.submit_proof(claim.id, 'signature', 'sig_abc123', 'verifierB')
+e.submit_proof(claim.id, 'attestation', 'att_xyz789', 'verifierA')
+verdict = e.evaluate(claim.id)
+print(f'With proofs: {verdict.score.name} ({verdict.confidence}) — {verdict.explanation}')
+"
+git add .
+git commit -m "Phase 2: Proof Engine — TrustEngine with claim submission, proof verification, and trust scoring"
+
+# ============================================
+# 60% — API LAYER
+# ============================================
+pip install fastapi uvicorn
+nano api/server.py
+# PASTE: FastAPI app with /claim, /proof, /trust endpoints
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/claim -H "Content-Type: application/json" -d '{"subject":"user123","predicate":"says hello","content":"hello world"}'
+CLAIM_ID="4a9923d10bf814ec916f17b90410d9cccf4b56bc6297f3df02570a4cbe683971"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"hash_match\",\"proof_data\":\"hash123\",\"verifier\":\"nodeA\"}"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"signature\",\"proof_data\":\"sig456\",\"verifier\":\"nodeB\"}"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"attestation\",\"proof_data\":\"att789\",\"verifier\":\"nodeA\"}"
+curl http://localhost:8000/trust?claim_id=$CLAIM_ID
+git add .
+git commit -m "Phase 3: API Layer — FastAPI server with /claim, /proof, /trust endpoints operational"
+
+# ============================================
+# 80% — PERSISTENCE
+# ============================================
+pip install aiosqlite
+nano core/database.py
+# PASTE: init_db, save_claim, save_proof, load_claims, load_proofs
+nano api/server.py
+# UPDATE: add startup event to load from DB, make endpoints async
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/claim -H "Content-Type: application/json" -d '{"subject":"user456","predicate":"reports news","content":"The sky is blue"}'
+CLAIM_ID="7fe3ecd25adbc7f83e1886f44975db9ff1080ec36d7b20fe455c4129767e1179"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"hash_match\",\"proof_data\":\"hash123\",\"verifier\":\"nodeA\"}"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"signature\",\"proof_data\":\"sig456\",\"verifier\":\"nodeB\"}"
+curl -X POST http://localhost:8000/proof -H "Content-Type: application/json" -d "{\"claim_id\":\"$CLAIM_ID\",\"proof_type\":\"attestation\",\"proof_data\":\"att789\",\"verifier\":\"nodeA\"}"
+curl http://localhost:8000/trust?claim_id=$CLAIM_ID
+# STOP SERVER (Ctrl+C)
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl http://localhost:8000/trust?claim_id=$CLAIM_ID
+git add .
+git commit -m "Phase 4: Persistence — SQLite database layer, claims and proofs survive restart"
+
+# ============================================
+# 100% — DOCKER + GITHUB
+# ============================================
+nano requirements.txt
+# PASTE: fastapi, uvicorn, aiosqlite
+nano Dockerfile
+# PASTE: python:3.12-slim, copy, install, expose, cmd
+nano .dockerignore
+# PASTE: venv/, __pycache__/, *.pyc, .git/, veritas.db
+sudo apt install docker.io -y
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+sudo reboot
+cd /home/balbaks/Projects/veritas
+source venv/bin/activate
+docker build -t veritas-node .
+docker run -d -p 8000:8000 --name veritas-test veritas-node
+curl http://localhost:8000/
+docker stop veritas-test && docker rm veritas-test
+git add .
+git commit -m "Phase 5: MVP Complete — Dockerized, requirements.txt, Layer 0 operational"
+git remote add origin https://github.com/balbaks/veritas.git
+git branch -M main
+git push -u origin main

@@ -1,0 +1,98 @@
+# ============================================================
+# LAYER 1: IDENTITY & REPUTATION — 100% FULL BUILD
+# ============================================================
+
+# ============================================
+# 20% — DECENTRALIZED IDENTIFIERS (DIDs)
+# ============================================
+cd /home/balbaks/Projects/veritas
+source venv/bin/activate
+pip install cryptography
+mkdir -p identity
+touch identity/__init__.py
+nano identity/did.py
+# PASTE: DID class with Ed25519 key generation, sign, verify
+python3 -c "
+from identity.did import DID
+alice = DID()
+print(f'DID: {alice.did}')
+msg = 'I am alice'
+sig = alice.sign(msg)
+print(f'Signature valid: {DID.verify(alice.did, msg, sig, alice.export_public_key())}')
+print(f'Fake message valid: {DID.verify(alice.did, \"fake\", sig, alice.export_public_key())}')
+"
+git add .
+git commit -m "Layer 1 20%: DIDs — Ed25519 key generation, signing, verification"
+
+# ============================================
+# 40% — REPUTATION SCORES
+# ============================================
+nano identity/reputation.py
+# PASTE: ReputationRegistry class (new_identity, increment, decrement, get_score, get_standing, get_history)
+python3 -c "
+from identity.reputation import ReputationRegistry
+r = ReputationRegistry()
+r.new_identity('did:veritas:alice')
+r.increment('did:veritas:alice', 30, 'verified_claim')
+r.decrement('did:veritas:alice', 10, 'false_claim')
+print(f'Score: {r.get_score(\"did:veritas:alice\")}')
+print(f'Standing: {r.get_standing(\"did:veritas:alice\")}')
+print(f'History: {r.get_history(\"did:veritas:alice\")}')
+"
+git add .
+git commit -m "Layer 1 40%: Reputation scores — increment, decrement, standing, history"
+
+# ============================================
+# 60% — IDENTITY API ENDPOINTS
+# ============================================
+nano api/identity_routes.py
+# PASTE: FastAPI router with /did/create, /did/verify, /reputation/{did}, /reputation/{did}/increment, /reputation/{did}/decrement
+nano api/server.py
+# REPLACE ALL: add import for identity_router, add app.include_router, bump version to 0.3.0
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/identity/did/create
+DID="paste-returned-did-here"
+curl -X POST http://localhost:8000/identity/reputation/$DID/increment -H "Content-Type: application/json" -d '{"amount":30,"reason":"verified_claim"}'
+curl -X POST http://localhost:8000/identity/reputation/$DID/decrement -H "Content-Type: application/json" -d '{"amount":10,"reason":"false_claim"}'
+curl http://localhost:8000/identity/reputation/$DID
+git add .
+git commit -m "Layer 1 60%: Identity API — DID creation, verification, reputation endpoints"
+
+# ============================================
+# 80% — PERSISTENCE FOR IDENTITIES
+# ============================================
+nano identity/database.py
+# PASTE: init_identity_db, save_identity, save_reputation_event, load_identities, load_reputation_events
+nano api/identity_routes.py
+# REPLACE ALL: add async save calls
+nano api/server.py
+# REPLACE ALL: add identity DB init and loading in startup, bump version to 0.4.0
+sudo apt install sqlite3 -y
+sudo fuser -k 8000/tcp
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl -X POST http://localhost:8000/identity/did/create
+DID="paste-returned-did-here"
+curl -X POST http://localhost:8000/identity/reputation/$DID/increment -H "Content-Type: application/json" -d '{"amount":40,"reason":"many_verified_claims"}'
+# STOP SERVER (Ctrl+C)
+source venv/bin/activate
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+curl http://localhost:8000/identity/reputation/$DID
+git add .
+git commit -m "Layer 1 80%: Identity persistence — DIDs and reputation survive restart"
+
+# ============================================
+# 100% — DOCKER + GITHUB PUSH
+# ============================================
+pip freeze > requirements.txt
+docker build -t veritas-node .
+sudo fuser -k 8000/tcp
+docker rm -f veritas-l1 veritas-test 2>/dev/null
+docker run -d -p 8000:8000 --name veritas-l1 veritas-node
+sleep 3
+curl http://localhost:8000/
+curl -X POST http://localhost:8000/identity/did/create
+docker stop veritas-l1 && docker rm veritas-l1
+git add .
+git commit -m "Layer 1 100%: Identity & Reputation complete — DIDs, scores, API, persistence, containerized"
+git push origin main
