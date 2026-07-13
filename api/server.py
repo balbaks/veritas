@@ -5,16 +5,16 @@ from core.database import init_db, save_claim, save_proof, load_claims, load_pro
 from api.identity_routes import identity_router
 from api.content_routes import content_router, registry
 from api.agent_routes import agent_router, agent_registry, delegation_manager
+from api.economic_routes import economic_router
 from identity.database import init_identity_db, load_identities, load_reputation_events
 from content.database import init_content_db, load_contents
 from agents.database import init_agent_db, load_agents, load_delegations
 import api.identity_routes as identity_module
 import api.agent_routes as agent_module
 
-# Wire did_store reference immediately
 agent_module.did_store_ref = identity_module.did_store
 
-app = FastAPI(title="VERITAS", version="0.8.2")
+app = FastAPI(title="VERITAS", version="0.9.0")
 engine = TrustEngine()
 
 
@@ -39,6 +39,7 @@ async def startup():
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 app.include_router(content_router, prefix="/content", tags=["Content"])
 app.include_router(agent_router, prefix="/agents", tags=["Agents"])
+app.include_router(economic_router, prefix="/economic", tags=["Economic"])
 
 
 class ClaimRequest(BaseModel):
