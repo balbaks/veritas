@@ -60,6 +60,9 @@ class LogActionRequest(BaseModel):
     delegation_id: str
     action: str
     details: str
+    authorized_by: str
+    signature: str
+    message: str
 
 
 def _verify_did(did: str, message: str, signature: str) -> bool:
@@ -123,6 +126,8 @@ def revoke_delegation(delegation_id: str, req: RevokeRequest):
 
 @agent_router.post("/delegate/log")
 def log_action(req: LogActionRequest):
+    if not _verify_did(req.authorized_by, req.message, req.signature):
+        raise HTTPException(status_code=403, detail="Invalid signature")
     delegation_manager.log_action(req.delegation_id, req.action, req.details)
     return {"delegation_id": req.delegation_id, "action": req.action, "logged": True}
 
