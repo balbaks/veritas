@@ -25,6 +25,17 @@ class TrustEngine:
         self.proofs[claim_id].append(proof)
         return proof
 
+    def _validate_proof(self, claim: Claim, proof: Proof) -> bool:
+        if proof.proof_type == "hash_match":
+            return proof.proof_data == claim.content_hash
+        elif proof.proof_type == "signature":
+            return len(proof.proof_data) >= 64 and proof.verifier != ""
+        elif proof.proof_type == "attestation":
+            return len(proof.proof_data) >= 16 and proof.verifier != ""
+        elif proof.proof_type == "zk_proof":
+            return proof.proof_data.startswith("zk:") and len(proof.proof_data) > 16
+        return False
+
     def evaluate(self, claim_id: str) -> TrustVerdict:
         claim = self.claims.get(claim_id)
         if not claim:
@@ -38,9 +49,21 @@ class TrustEngine:
             )
 
         proofs = self.proofs.get(claim_id, [])
-        proof_count = len(proofs)
-        verifiers = set(p.verifier for p in proofs)
+        valid_proofs = [p for p in proofs if self._validate_proof(claim, p)]
+        invalid_count = len(proofs) - len(valid_proofs)
+        verifiers = set(p.verifier for p in valid_proofs)
+        proof_count = len(valid_proofs)
         source_count = len(verifiers)
+
+        if invalid_count > 0 and proof_count == 0:
+            return TrustVerdict(
+                claim_id=claim_id,
+                score=TrustScore.SUSPICIOUS,
+                confidence=0.1,
+                proof_count=0,
+                source_count=0,
+                explanation=f"All {invalid_count} proofs failed validation."
+            )
 
         if proof_count == 0:
             return TrustVerdict(
@@ -49,10 +72,9 @@ class TrustEngine:
                 confidence=0.0,
                 proof_count=0,
                 source_count=0,
-                explanation="No proofs submitted for this claim."
+                explanation="No valid proofs submitted for this claim."
             )
 
-        # Simple scoring: more proofs from different sources = higher trust
         if proof_count >= 3 and source_count >= 2:
             score = TrustScore.VERIFIED
             confidence = 0.95
@@ -66,11 +88,15 @@ class TrustEngine:
             score = TrustScore.SUSPICIOUS
             confidence = 0.2
 
+        explanation = f"Score based on {proof_count} valid proofs from {source_count} independent sources."
+        if invalid_count > 0:
+            explanation += f" ({invalid_count} invalid proofs rejected.)"
+
         return TrustVerdict(
             claim_id=claim_id,
             score=score,
             confidence=confidence,
             proof_count=proof_count,
             source_count=source_count,
-            explanation=f"Score based on {proof_count} proofs from {source_count} independent sources."
+            explanation=explanation
         )
