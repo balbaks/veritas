@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from core.engine import TrustEngine
 from core.database import init_db, save_claim, save_proof, load_claims, load_proofs
+from api.identity_routes import identity_router
 
-app = FastAPI(title="VERITAS TIPC", version="0.2.0")
+app = FastAPI(title="VERITAS TIPC", version="0.3.0")
 engine = TrustEngine()
 
 
@@ -12,6 +13,9 @@ async def startup():
     await init_db()
     engine.claims = await load_claims()
     engine.proofs = await load_proofs()
+
+
+app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 
 
 class ClaimRequest(BaseModel):
