@@ -4,11 +4,12 @@ from core.engine import TrustEngine
 from core.database import init_db, save_claim, save_proof, load_claims, load_proofs
 from api.identity_routes import identity_router
 from api.content_routes import content_router, registry
+from api.agent_routes import agent_router
 from identity.database import init_identity_db, load_identities, load_reputation_events
 from content.database import init_content_db, load_contents
 import api.identity_routes as identity_module
 
-app = FastAPI(title="VERITAS", version="0.6.0")
+app = FastAPI(title="VERITAS", version="0.7.0")
 engine = TrustEngine()
 
 
@@ -29,6 +30,7 @@ async def startup():
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 app.include_router(content_router, prefix="/content", tags=["Content"])
+app.include_router(agent_router, prefix="/agents", tags=["Agents"])
 
 
 class ClaimRequest(BaseModel):
@@ -51,7 +53,8 @@ def root():
         "status": "operational",
         "claims": len(engine.claims),
         "identities": len(identity_module.did_store),
-        "contents": len(registry.contents)
+        "contents": len(registry.contents),
+        "agents": len(agent_registry.agents)
     }
 
 
