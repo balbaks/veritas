@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from core.engine import TrustEngine
 from core.database import init_db, save_claim, save_proof, load_claims, load_proofs
 from api.identity_routes import identity_router
@@ -23,12 +24,11 @@ economic_module.did_store_ref = identity_module.did_store
 governance_module.did_store_ref = identity_module.did_store
 content_module.did_store_ref = identity_module.did_store
 
-app = FastAPI(title="VERITAS", version="1.1.3")
 engine = TrustEngine()
 
 
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await init_db()
     await init_identity_db()
     await init_content_db()
@@ -48,7 +48,10 @@ async def startup():
     await load_delegations(delegation_manager)
     await load_economic_data(economic_engine)
     await load_governance_data(gov_engine, curation_engine)
+    yield
 
+
+app = FastAPI(title="VERITAS", version="1.1.4", lifespan=lifespan)
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 app.include_router(content_router, prefix="/content", tags=["Content"])
@@ -74,7 +77,7 @@ class ProofRequest(BaseModel):
 def root():
     return {
         "protocol": "VERITAS",
-        "version": "1.1.3",
+        "version": "1.1.4",
         "status": "operational",
         "claims": len(engine.claims),
         "identities": len(identity_module.did_store),

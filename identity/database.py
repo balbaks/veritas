@@ -1,7 +1,6 @@
 import aiosqlite
 from identity.reputation import ReputationRegistry
-
-DB_PATH = "veritas.db"
+from core.database import DB_PATH
 
 
 async def init_identity_db():

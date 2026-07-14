@@ -1,8 +1,7 @@
 import aiosqlite
 import json
 from economic.escrow import EconomicEngine, EscrowStatus
-
-DB_PATH = "veritas.db"
+from core.database import DB_PATH
 
 
 async def init_economic_db():

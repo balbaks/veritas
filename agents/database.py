@@ -2,8 +2,7 @@ import aiosqlite
 import json
 from agents.registry import AgentRegistry
 from agents.delegation import DelegationManager
-
-DB_PATH = "veritas.db"
+from core.database import DB_PATH
 
 
 async def init_agent_db():

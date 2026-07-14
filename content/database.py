@@ -1,7 +1,6 @@
 import aiosqlite
 import json
-
-DB_PATH = "veritas.db"
+from core.database import DB_PATH
 
 
 async def init_content_db():
@@ -51,7 +50,6 @@ async def save_edit(content_hash: str, editor_did: str, new_hash: str, edit_type
 
 
 async def load_contents(registry):
-    from content.registry import ContentRegistry
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT * FROM contents")
         rows = await cursor.fetchall()

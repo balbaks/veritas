@@ -2,8 +2,7 @@ import aiosqlite
 import json
 from governance.proposals import GovernanceEngine, ProposalStatus, ProposalType
 from governance.curation import CurationEngine
-
-DB_PATH = "veritas.db"
+from core.database import DB_PATH
 
 
 async def init_governance_db():

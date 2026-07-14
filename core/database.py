@@ -1,5 +1,4 @@
 import aiosqlite
-import json
 from core.models import Claim, Proof
 
 DB_PATH = "veritas.db"
