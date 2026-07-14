@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from enum import Enum
 
@@ -19,7 +19,7 @@ class EconomicEngine:
         self.escrows: dict = {}
 
     def create_transaction(self, buyer_did: str, seller_did: str, agent_id: str, amount: float, currency: str, description: str) -> str:
-        tx_data = f"{buyer_did}{seller_did}{amount}{currency}{datetime.utcnow().isoformat()}"
+        tx_data = f"{buyer_did}{seller_did}{amount}{currency}{datetime.now(timezone.utc).isoformat()}"
         tx_id = hashlib.sha256(tx_data.encode()).hexdigest()[:16]
 
         self.transactions[tx_id] = {
@@ -30,7 +30,7 @@ class EconomicEngine:
             "amount": amount,
             "currency": currency,
             "description": description,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "pending",
             "escrow_id": None,
             "proofs": [],
@@ -45,7 +45,7 @@ class EconomicEngine:
         if tx["status"] != "pending":
             return None
 
-        escrow_id = hashlib.sha256(f"escrow:{tx_id}:{datetime.utcnow().isoformat()}".encode()).hexdigest()[:16]
+        escrow_id = hashlib.sha256(f"escrow:{tx_id}:{datetime.now(timezone.utc).isoformat()}".encode()).hexdigest()[:16]
         self.escrows[escrow_id] = {
             "escrow_id": escrow_id,
             "tx_id": tx_id,
@@ -54,7 +54,7 @@ class EconomicEngine:
             "buyer_did": tx["buyer_did"],
             "seller_did": tx["seller_did"],
             "status": EscrowStatus.FUNDED,
-            "funded_at": datetime.utcnow().isoformat(),
+            "funded_at": datetime.now(timezone.utc).isoformat(),
             "released_at": None,
             "dispute_at": None,
             "resolution": None
@@ -68,7 +68,7 @@ class EconomicEngine:
         if not escrow or escrow["status"] != EscrowStatus.FUNDED:
             return False
         escrow["status"] = EscrowStatus.RELEASED
-        escrow["released_at"] = datetime.utcnow().isoformat()
+        escrow["released_at"] = datetime.now(timezone.utc).isoformat()
         tx = self.transactions.get(escrow["tx_id"])
         if tx:
             tx["status"] = "completed"
@@ -79,7 +79,7 @@ class EconomicEngine:
         if not escrow or escrow["status"] != EscrowStatus.FUNDED:
             return False
         escrow["status"] = EscrowStatus.DISPUTED
-        escrow["dispute_at"] = datetime.utcnow().isoformat()
+        escrow["dispute_at"] = datetime.now(timezone.utc).isoformat()
         tx = self.transactions.get(escrow["tx_id"])
         if tx:
             tx["status"] = "disputed"
@@ -87,7 +87,7 @@ class EconomicEngine:
                 "filed_by": filed_by,
                 "reason": reason,
                 "proof_hash": proof_hash,
-                "filed_at": datetime.utcnow().isoformat()
+                "filed_at": datetime.now(timezone.utc).isoformat()
             }
         return True
 
@@ -99,7 +99,7 @@ class EconomicEngine:
         escrow["resolution"] = {
             "favor": "buyer" if favor_buyer else "seller",
             "resolved_by": resolved_by,
-            "resolved_at": datetime.utcnow().isoformat()
+            "resolved_at": datetime.now(timezone.utc).isoformat()
         }
         tx = self.transactions.get(escrow["tx_id"])
         if tx:

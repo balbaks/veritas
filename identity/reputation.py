@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Callable
 
 
@@ -20,7 +20,7 @@ class ReputationRegistry:
             "action": "increment",
             "amount": amount,
             "reason": reason,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
     def decrement(self, did: str, amount: float, reason: str):
@@ -30,7 +30,7 @@ class ReputationRegistry:
             "action": "decrement",
             "amount": amount,
             "reason": reason,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
     def get_score(self, did: str) -> Optional[float]:

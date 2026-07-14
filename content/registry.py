@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -14,7 +14,7 @@ class ContentRegistry:
             "size": len(data),
             "mime_type": mime_type,
             "creator_did": creator_did,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": metadata or {},
             "edit_chain": [],
             "origin_verified": False,
@@ -31,7 +31,7 @@ class ContentRegistry:
                 "editor_did": editor_did,
                 "new_hash": new_hash,
                 "edit_type": edit_type,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
 
     def verify_origin(self, content_hash: str, creator_did: str) -> bool:

@@ -4,7 +4,7 @@ from agents.registry import AgentRegistry
 from agents.delegation import DelegationManager
 from agents.database import save_dispute, save_agent, save_delegation
 from identity.did import verify_request
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 agent_router = APIRouter()
@@ -162,7 +162,7 @@ async def file_dispute(agent_id: str, req: DisputeRequest):
                           req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     agent_registry.file_dispute(agent_id, req.details, req.filed_by)
-    await save_dispute(agent_id, req.details, req.filed_by, datetime.utcnow().isoformat())
+    await save_dispute(agent_id, req.details, req.filed_by, datetime.now(timezone.utc).isoformat())
     agent = agent_registry.get(agent_id)
     return {
         "agent_id": agent_id,

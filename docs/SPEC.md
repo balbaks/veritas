@@ -1,4 +1,4 @@
-# VERITAS Protocol Specification v1.1.3
+# VERITAS Protocol Specification v1.2.0
 
 ## Abstract
 
@@ -139,34 +139,56 @@ The protocol requires survival across restarts for: claims, proofs, identities (
 
 ## 13. API Conventions
 
-### 13.1 Authenticated Endpoints (require Ed25519 signature + message)
+### 13.1 Authenticated Endpoints — Canonical Signature Scheme (v1.2.0)
 
-| Endpoint | Auth Required |
-|----------|---------------|
-| POST /content/register | ✅ Creator DID signature |
-| POST /content/edit | ✅ Editor DID signature |
-| POST /content/verify-origin | ✅ Creator DID signature |
-| POST /identity/reputation/{did}/increment | ✅ DID signature |
-| POST /identity/reputation/{did}/decrement | ✅ DID signature |
-| POST /identity/stake | ✅ DID signature |
-| POST /agents/register | ✅ Owner DID signature |
-| POST /agents/{id}/transaction | ✅ Authorized DID signature |
-| POST /agents/{id}/dispute | ✅ Filer DID signature |
-| POST /agents/delegate | ✅ Owner DID signature |
-| POST /agents/delegate/{id}/revoke | ✅ Owner DID signature |
-| POST /economic/transaction | ✅ Buyer DID signature |
-| POST /economic/escrow/fund | ✅ Buyer DID signature |
-| POST /economic/escrow/{id}/release | ✅ Seller DID signature |
-| POST /economic/escrow/{id}/dispute | ✅ Party DID signature |
-| POST /economic/escrow/{id}/resolve | ✅ Party DID signature |
-| POST /governance/proposal | ✅ Proposer DID signature |
-| POST /governance/vote | ✅ Voter DID signature |
-| POST /governance/execute/{id} | ✅ Executor DID signature |
-| POST /governance/curation/list | ✅ Owner DID signature |
-| POST /governance/curation/curator | ✅ Added-by DID signature |
-| POST /governance/curation/item | ✅ Curator DID signature |
-| POST /governance/curation/verify | ✅ Curator DID signature |
-| POST /governance/curation/reject | ✅ Curator DID signature |
+All mutating endpoints require an Ed25519 signature over a deterministically serialized canonical message. The server reconstructs the message from actual request parameters — no caller-supplied message string is accepted.
+
+**Canonical message format:**
+```
+op|k1=v1&k2=v2&...|timestamp
+```
+- `op` — stable dot-separated operation identifier (e.g. `"escrow.fund"`)
+- Key-value pairs sorted lexicographically by key, joined with `&`
+- `timestamp` — ISO-8601 UTC string (e.g. `"2026-07-14T10:30:00.000000"`)
+
+**Value serialization rules:**
+- `float`/`int` → `f"{float(v):.8f}".rstrip('0').rstrip('.')` — `10` and `10.0` both become `"10"`, `10.5` stays `"10.5"`. **This is the rule most likely to produce 403s** if your client uses a different float format.
+- `bool` → `"true"` or `"false"` (lowercase)
+- `None` → `""` (empty string)
+- `str` → percent-encode `%→%25`, `&→%26`, `=→%3D`, `|→%7C` (in that order, `%` first)
+- `dict` / `list` → raises ValueError — params must be flat
+
+**Replay protection:** Timestamps outside a 60-second window are rejected with 403.
+
+**Per-endpoint op IDs and params:**
+
+| Endpoint | Op ID | Params |
+|----------|-------|--------|
+| POST /content/register | `content.register` | `{creator_did}` |
+| POST /content/edit | `content.edit` | `{content_hash, edit_type, editor_did, new_hash}` |
+| POST /content/verify-origin | `content.verify_origin` | `{content_hash, creator_did}` |
+| POST /identity/reputation/{did}/increment | `identity.reputation.increment` | `{amount, did, reason}` |
+| POST /identity/reputation/{did}/decrement | `identity.reputation.decrement` | `{amount, did, reason}` |
+| POST /identity/stake | `identity.stake` | `{amount, did}` |
+| POST /agents/register | `agent.register` | `{agent_type, owner_did}` |
+| POST /agents/{id}/transaction | `agent.transaction` | `{agent_id, authorized_by, success}` |
+| POST /agents/{id}/dispute | `agent.dispute` | `{agent_id, filed_by}` |
+| POST /agents/delegate | `agent.delegate` | `{agent_id, owner_did}` |
+| POST /agents/delegate/{id}/revoke | `agent.delegate.revoke` | `{delegation_id, owner_did}` |
+| POST /agents/delegate/log | `agent.delegate.log` | `{action, authorized_by, delegation_id}` |
+| POST /economic/transaction | `escrow.transaction.create` | `{amount, buyer_did, currency, seller_did}` |
+| POST /economic/escrow/fund | `escrow.fund` | `{tx_id}` |
+| POST /economic/escrow/{id}/release | `escrow.release` | `{escrow_id}` |
+| POST /economic/escrow/{id}/dispute | `escrow.dispute` | `{escrow_id, reason}` |
+| POST /economic/escrow/{id}/resolve | `escrow.resolve` | `{escrow_id, favor_buyer}` |
+| POST /governance/proposal | `gov.proposal` | `{proposal_type, proposer_did, title}` |
+| POST /governance/vote | `gov.vote` | `{prop_id, support}` |
+| POST /governance/execute/{id} | `gov.execute` | `{executor_did, prop_id}` |
+| POST /governance/curation/list | `gov.curation.create` | `{name, owner_did}` |
+| POST /governance/curation/curator | `gov.curation.curator.add` | `{added_by, curator_did, list_id}` |
+| POST /governance/curation/item | `gov.curation.add` | `{added_by, content_hash, list_id}` |
+| POST /governance/curation/verify | `gov.curation.verify` | `{content_hash, list_id, verifier_did}` |
+| POST /governance/curation/reject | `gov.curation.remove` | `{content_hash, list_id, verifier_did}` |
 
 ### 13.2 Open Endpoints (no auth by design)
 
@@ -204,5 +226,6 @@ v1.1.0: Honest labels, Sybil staking, AI detection removed from API
 v1.1.1: Governance auth, server-side voting power, sqrt damping
 v1.1.2: Execute auth, tally cleanup
 v1.1.3: Content auth (register/edit/verify-origin), SPEC accuracy
+v1.2.0: Canonical signature auth — deterministic payload binding, 60s replay window, message field eliminated, verify_request as single shared function, all 25 mutating routes covered
 
 Reference implementation: github.com/balbaks/veritas — Python 3.12, FastAPI, SQLite, Docker, MIT license.

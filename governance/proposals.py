@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
@@ -36,7 +36,7 @@ class GovernanceEngine:
         if duration_hours is None:
             duration_hours = self.parameters["voting_period_hours"]
 
-        prop_data = f"{proposer_did}{title}{datetime.utcnow().isoformat()}"
+        prop_data = f"{proposer_did}{title}{datetime.now(timezone.utc).isoformat()}"
         prop_id = hashlib.sha256(prop_data.encode()).hexdigest()[:16]
 
         self.proposals[prop_id] = {
@@ -47,8 +47,8 @@ class GovernanceEngine:
             "proposal_type": proposal_type,
             "changes": changes or {},
             "status": ProposalStatus.ACTIVE,
-            "created_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(hours=duration_hours)).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=duration_hours)).isoformat(),
             "votes_for": 0,
             "votes_against": 0,
             "voters": {},
@@ -60,7 +60,7 @@ class GovernanceEngine:
         prop = self.proposals.get(prop_id)
         if not prop or prop["status"] != ProposalStatus.ACTIVE:
             return False
-        if datetime.utcnow() > datetime.fromisoformat(prop["expires_at"]):
+        if datetime.now(timezone.utc) > datetime.fromisoformat(prop["expires_at"]):
             prop["status"] = ProposalStatus.EXPIRED
             return False
         if voter_did in prop["voters"]:
@@ -110,13 +110,13 @@ class GovernanceEngine:
             if arbiter_did:
                 self.arbiters[arbiter_did] = {
                     "did": arbiter_did,
-                    "elected_at": datetime.utcnow().isoformat(),
+                    "elected_at": datetime.now(timezone.utc).isoformat(),
                     "proposal_id": prop_id,
                     "active": True
                 }
 
         prop["status"] = ProposalStatus.EXECUTED
-        prop["executed_at"] = datetime.utcnow().isoformat()
+        prop["executed_at"] = datetime.now(timezone.utc).isoformat()
         return True
 
     def get_proposal(self, prop_id: str) -> Optional[dict]:

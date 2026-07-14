@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -8,7 +8,7 @@ class AgentRegistry:
         self.agents: dict = {}
 
     def register(self, owner_did: str, agent_type: str, capabilities: list, metadata: dict = None) -> str:
-        agent_data = f"{owner_did}{agent_type}{str(capabilities)}{datetime.utcnow().isoformat()}"
+        agent_data = f"{owner_did}{agent_type}{str(capabilities)}{datetime.now(timezone.utc).isoformat()}"
         agent_id = hashlib.sha256(agent_data.encode()).hexdigest()[:16]
         
         self.agents[agent_id] = {
@@ -17,7 +17,7 @@ class AgentRegistry:
             "agent_type": agent_type,
             "capabilities": capabilities,
             "metadata": metadata or {},
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "active": True,
             "trust_score": 50.0,
             "transactions_count": 0,
@@ -49,7 +49,7 @@ class AgentRegistry:
             self.agents[agent_id]["disputes"].append({
                 "details": dispute_details,
                 "filed_by": filed_by,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "resolved": False
             })
             self.agents[agent_id]["trust_score"] = max(0, self.agents[agent_id]["trust_score"] - 10)

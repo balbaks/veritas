@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -8,7 +8,7 @@ class CurationEngine:
         self.curator_trust: dict = {}
 
     def create_list(self, owner_did: str, name: str, description: str, criteria: dict = None) -> str:
-        list_id = f"curated:{owner_did}:{name}:{datetime.utcnow().timestamp()}"
+        list_id = f"curated:{owner_did}:{name}:{datetime.now(timezone.utc).timestamp()}"
         self.curated_lists[list_id] = {
             "list_id": list_id,
             "owner_did": owner_did,
@@ -17,8 +17,8 @@ class CurationEngine:
             "criteria": criteria or {},
             "items": [],
             "curators": [owner_did],
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
         return list_id
 
@@ -38,11 +38,11 @@ class CurationEngine:
             "content_hash": content_hash,
             "added_by": added_by,
             "note": note,
-            "added_at": datetime.utcnow().isoformat(),
+            "added_at": datetime.now(timezone.utc).isoformat(),
             "verified_count": 0,
             "rejected_count": 0
         })
-        lst["updated_at"] = datetime.utcnow().isoformat()
+        lst["updated_at"] = datetime.now(timezone.utc).isoformat()
         return True
 
     def verify_item(self, list_id: str, content_hash: str, verifier_did: str) -> bool:

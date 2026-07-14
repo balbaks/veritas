@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from identity.did import DID, verify_request
 from identity.reputation import ReputationRegistry
 from identity.database import save_identity, save_reputation_event, save_stake
-from datetime import datetime
+from datetime import datetime, timezone
 
 identity_router = APIRouter()
 reputation = ReputationRegistry()
@@ -29,7 +29,7 @@ async def create_did():
     identity = DID()
     public_key = identity.export_public_key()
     private_key = identity.private_key.private_bytes_raw().hex()
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
 
     did_store[identity.did] = {"public_key": public_key}
     reputation.new_identity(identity.did)
@@ -64,7 +64,7 @@ async def increment_reputation(did: str, req: ReputationAction):
                           req.timestamp, req.signature, did_store):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     reputation.increment(did, req.amount, req.reason)
-    await save_reputation_event(did, "increment", req.amount, req.reason, datetime.utcnow().isoformat())
+    await save_reputation_event(did, "increment", req.amount, req.reason, datetime.now(timezone.utc).isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
 
 
@@ -75,7 +75,7 @@ async def decrement_reputation(did: str, req: ReputationAction):
                           req.timestamp, req.signature, did_store):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     reputation.decrement(did, req.amount, req.reason)
-    await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.utcnow().isoformat())
+    await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.now(timezone.utc).isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
 
 

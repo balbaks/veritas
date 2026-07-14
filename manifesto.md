@@ -94,4 +94,4 @@ One person. A PC. Ubuntu. AI collaboration. And the conviction that trust should
 
 ## Status
 
-**v1.1.0 — All 5 layers operational. Building in the open.**
+**v1.2.0 — Canonical payload binding auth on all 25 mutating routes. Building in the open.**

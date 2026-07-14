@@ -4,7 +4,7 @@ from content.registry import ContentRegistry
 from content.detector import AIContentDetector
 from content.database import save_content, save_edit
 from identity.did import verify_request
-from datetime import datetime
+from datetime import datetime, timezone
 
 content_router = APIRouter()
 registry = ContentRegistry()
@@ -51,7 +51,7 @@ async def register_content(
     registry.set_ai_score(content_hash, analysis["ai_generated_score"])
 
     await save_content(content_hash, len(content_bytes), mime_type, creator_did,
-                       datetime.utcnow().isoformat(), metadata, False, analysis["ai_generated_score"])
+                       datetime.now(timezone.utc).isoformat(), metadata, False, analysis["ai_generated_score"])
 
     return {
         "content_hash": content_hash,
@@ -88,5 +88,5 @@ async def add_edit(req: EditRequest):
                           req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired editor signature")
     registry.add_edit(req.content_hash, req.editor_did, req.new_hash, req.edit_type)
-    await save_edit(req.content_hash, req.editor_did, req.new_hash, req.edit_type, datetime.utcnow().isoformat())
+    await save_edit(req.content_hash, req.editor_did, req.new_hash, req.edit_type, datetime.now(timezone.utc).isoformat())
     return {"content_hash": req.content_hash, "edit_type": req.edit_type, "editor": req.editor_did}

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from fastapi.routing import APIRoute
 from api.server import app
 from identity.did import canonical_message, DID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 client = TestClient(app)
@@ -28,7 +28,7 @@ def _make_did():
 
 def _sign(pk, op, params, ts=None):
     if ts is None:
-        ts = datetime.utcnow().isoformat()
+        ts = datetime.now(timezone.utc).isoformat()
     msg = canonical_message(op, params, ts)
     return pk.sign(msg.encode()).hex(), ts
 
@@ -63,7 +63,7 @@ def test_tampered_amount_rejected():
     seller_did, _ = _make_did()
 
     # Create a transaction
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     sig, ts = _sign(buyer_pk, "escrow.transaction.create", {
         "amount": 10.0, "buyer_did": buyer_did, "currency": "USDC", "seller_did": seller_did
     }, now)
@@ -76,7 +76,7 @@ def test_tampered_amount_rejected():
     tx_id = tx_resp.json()["tx_id"]
 
     # Fund escrow — sign with tx_id=<correct>
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     sig, ts = _sign(buyer_pk, "escrow.fund", {"tx_id": tx_id}, now)
     fund_resp = client.post("/economic/escrow/fund", json={
         "tx_id": tx_id, "buyer_did": buyer_did, "signature": sig, "timestamp": ts
@@ -86,7 +86,7 @@ def test_tampered_amount_rejected():
 
     # Now sign a release for escrow_id — but submit it with escrow_id="tampered"
     seller_did2, seller_pk = _make_did()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     sig, ts = _sign(seller_pk, "escrow.release", {"escrow_id": escrow_id}, now)
     # Try to use that signature for a different escrow_id
     tampered_resp = client.post(f"/economic/escrow/TAMPERED/release", json={
@@ -100,7 +100,7 @@ def test_tampered_amount_rejected():
 def test_signature_not_reusable_across_endpoints():
     """A valid signature for escrow.fund must not pass gov.vote verification."""
     did, pk = _make_did()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Sign for escrow.fund
     sig, ts = _sign(pk, "escrow.fund", {"tx_id": "sometx"}, now)
@@ -156,7 +156,7 @@ def test_replayed_request_rejected(module, route, signer_field, op, build_body):
     did, pk = _make_did()
     did2, _ = _make_did()
 
-    old_ts = (datetime.utcnow() - timedelta(seconds=121)).isoformat()
+    old_ts = (datetime.now(timezone.utc) - timedelta(seconds=121)).isoformat()
     op_name, params = op(did, did2)
     msg = canonical_message(op_name, params, old_ts)
     sig = pk.sign(msg.encode()).hex()
@@ -283,7 +283,7 @@ def _all_routes(app):
 
 def test_all_mutating_routes_reject_bad_signature():
     did, _ = _make_did()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     bodies = _bodies(did, now)
 
     mutating_methods = {"POST", "PUT", "PATCH", "DELETE"}
