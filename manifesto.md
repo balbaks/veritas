@@ -4,6 +4,26 @@
 
 ---
 
+## STATUS (v1.2.0)
+
+### Built
+- All 5 layers: Trust Protocol, Identity & Reputation, Content Provenance, Agent Trust, Economic Trust, Governance
+- 25 authenticated endpoints with canonical payload binding and 60-second replay protection
+- 13 tests including a route-enumerating meta-test that verifies every mutating endpoint rejects bad signatures
+- Public protocol specification (docs/SPEC.md)
+- Honest labeling: WELL_ATTESTED / LIKELY_AUTHENTIC / UNVERIFIED / POORLY_ATTESTED / CONTRADICTED — these describe evidence, not truth
+
+### Deliberately Rejected
+- AI/deepfake detection — this is an arms race detectors are losing. VERITAS does positive provenance instead: signed-at-creation, verified creator, unaltered content
+- Truth verdicts — cryptography verifies provenance, not truth. The protocol reports what evidence exists and who attested to it. Human judgment decides what's true
+
+### Aspirational (not built)
+- Zero-knowledge proofs
+- Tokenized incentives
+- Cross-chain support
+
+---
+
 ## The Problem
 
 The internet doesn't know what's real. Deepfakes, bot armies, AI-generated content, fake identities. Platforms decide what you trust — their algorithms, their interests.

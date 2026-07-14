@@ -79,7 +79,7 @@ class ProofRequest(BaseModel):
 def root():
     return {
         "protocol": "VERITAS",
-        "version": "1.1.4",
+        "version": "1.2.0",
         "status": "operational",
         "claims": len(engine.claims),
         "identities": len(identity_module.did_store),
