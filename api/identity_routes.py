@@ -21,7 +21,6 @@ class ReputationAction(BaseModel):
     amount: float
     reason: str
     signature: str
-    message: str
     timestamp: str
 
 
@@ -29,7 +28,6 @@ class StakeRequest(BaseModel):
     did: str
     amount: float
     signature: str
-    message: str
     timestamp: str
 
 
@@ -79,8 +77,8 @@ async def increment_reputation(did: str, req: ReputationAction):
     pub_key = did_store.get(did, {}).get("public_key")
     if not pub_key:
         raise HTTPException(status_code=404, detail="DID public key not found")
-    valid = DID.verify_with_timestamp(did, req.message, req.signature, pub_key, req.timestamp)
-    if not valid:
+    msg = DID.build_message("reputation_increment", {"amount": str(req.amount), "did": did, "reason": req.reason}, req.timestamp)
+    if not DID.verify_with_timestamp(did, msg, req.signature, pub_key, req.timestamp):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
 
     reputation.increment(did, req.amount, req.reason)
@@ -93,8 +91,8 @@ async def decrement_reputation(did: str, req: ReputationAction):
     pub_key = did_store.get(did, {}).get("public_key")
     if not pub_key:
         raise HTTPException(status_code=404, detail="DID public key not found")
-    valid = DID.verify_with_timestamp(did, req.message, req.signature, pub_key, req.timestamp)
-    if not valid:
+    msg = DID.build_message("reputation_decrement", {"amount": str(req.amount), "did": did, "reason": req.reason}, req.timestamp)
+    if not DID.verify_with_timestamp(did, msg, req.signature, pub_key, req.timestamp):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
 
     reputation.decrement(did, req.amount, req.reason)
@@ -107,8 +105,8 @@ async def stake(req: StakeRequest):
     pub_key = did_store.get(req.did, {}).get("public_key")
     if not pub_key:
         raise HTTPException(status_code=404, detail="DID not found")
-    valid = DID.verify_with_timestamp(req.did, req.message, req.signature, pub_key, req.timestamp)
-    if not valid:
+    msg = DID.build_message("stake", {"amount": str(req.amount), "did": req.did}, req.timestamp)
+    if not DID.verify_with_timestamp(req.did, msg, req.signature, pub_key, req.timestamp):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     success = reputation.stake(req.did, req.amount)
     if not success:

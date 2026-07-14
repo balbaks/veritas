@@ -2,141 +2,127 @@ from fastapi.testclient import TestClient
 from api.server import app
 from identity.did import DID
 from datetime import datetime, timedelta
-import time
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 client = TestClient(app)
 
 
-def test_reputation_increment_requires_valid_signature():
-    # Create a DID
+def _make_did():
     resp = client.post("/identity/did/create")
     assert resp.status_code == 200
     data = resp.json()
-    did = data["did"]
-    public_key = data["public_key"]
-    private_key_hex = data["private_key"]
+    pk = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(data["private_key"]))
+    return data["did"], pk
 
-    from cryptography.hazmat.primitives.asymmetric import ed25519
-    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
 
-    # Valid signed request
+def _sign(pk, endpoint, params, timestamp):
+    msg = DID.build_message(endpoint, params, timestamp)
+    return msg, pk.sign(msg.encode()).hex()
+
+
+def test_reputation_increment_requires_valid_signature():
+    did, pk = _make_did()
     now = datetime.utcnow().isoformat()
-    message = f"reputation|amount=10.0&reason=test|{now}"
-    signature = private_key.sign(message.encode()).hex()
+    msg, sig = _sign(pk, "reputation_increment", {"amount": "10.0", "did": did, "reason": "test"}, now)
 
     resp = client.post(f"/identity/reputation/{did}/increment", json={
-        "amount": 10.0,
-        "reason": "test",
-        "signature": signature,
-        "message": message,
-        "timestamp": now
+        "amount": 10.0, "reason": "test", "signature": sig, "timestamp": now
     })
     assert resp.status_code == 200
 
-    # Wrong signature
     resp = client.post(f"/identity/reputation/{did}/increment", json={
-        "amount": 10.0,
-        "reason": "test",
-        "signature": "bad",
-        "message": "bad",
-        "timestamp": now
+        "amount": 10.0, "reason": "test", "signature": "bad", "timestamp": now
     })
     assert resp.status_code == 403
 
 
 def test_replay_attack_blocked():
-    # Create DID
-    resp = client.post("/identity/did/create")
-    data = resp.json()
-    did = data["did"]
-    private_key_hex = data["private_key"]
-
-    from cryptography.hazmat.primitives.asymmetric import ed25519
-    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
-
-    # Sign with a timestamp from 2 minutes ago
+    did, pk = _make_did()
     old_time = (datetime.utcnow() - timedelta(seconds=121)).isoformat()
-    message = f"reputation|amount=10.0&reason=test|{old_time}"
-    signature = private_key.sign(message.encode()).hex()
+    msg, sig = _sign(pk, "reputation_increment", {"amount": "10.0", "did": did, "reason": "test"}, old_time)
 
     resp = client.post(f"/identity/reputation/{did}/increment", json={
-        "amount": 10.0,
-        "reason": "test",
-        "signature": signature,
-        "message": message,
-        "timestamp": old_time
+        "amount": 10.0, "reason": "test", "signature": sig, "timestamp": old_time
+    })
+    assert resp.status_code == 403
+    assert "expired" in resp.json()["detail"].lower()
+
+
+def test_payload_binding_enforced():
+    did, pk = _make_did()
+    now = datetime.utcnow().isoformat()
+    # Sign a message authorizing amount=10.0
+    msg, sig = _sign(pk, "reputation_increment", {"amount": "10.0", "did": did, "reason": "test"}, now)
+
+    # Send amount=9999.0 — server rebuilds message with actual amount, signature mismatch
+    resp = client.post(f"/identity/reputation/{did}/increment", json={
+        "amount": 9999.0, "reason": "test", "signature": sig, "timestamp": now
+    })
+    assert resp.status_code == 403
+
+
+def test_replay_blocked_on_economic_routes():
+    buyer_did, buyer_pk = _make_did()
+    seller_did, _ = _make_did()
+
+    old_time = (datetime.utcnow() - timedelta(seconds=121)).isoformat()
+    msg, sig = _sign(buyer_pk, "economic_transaction", {
+        "amount": "100.0", "buyer_did": buyer_did, "currency": "USDC", "seller_did": seller_did
+    }, old_time)
+
+    resp = client.post("/economic/transaction", json={
+        "buyer_did": buyer_did, "seller_did": seller_did, "agent_id": "test",
+        "amount": 100.0, "currency": "USDC", "description": "test",
+        "signature": sig, "timestamp": old_time
     })
     assert resp.status_code == 403
     assert "expired" in resp.json()["detail"].lower()
 
 
 def test_dispute_resolution_requires_arbiter():
-    # Create DIDs
-    buyer = client.post("/identity/did/create").json()
-    seller = client.post("/identity/did/create").json()
-
-    from cryptography.hazmat.primitives.asymmetric import ed25519
+    buyer_did, buyer_pk = _make_did()
+    seller_did, seller_pk = _make_did()
 
     # Create transaction
-    buyer_pk = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(buyer["private_key"]))
     now = datetime.utcnow().isoformat()
-    msg = f"economic_transaction|amount=100.0&currency=USDC&description=test|{now}"
-    sig = buyer_pk.sign(msg.encode()).hex()
-
+    msg, sig = _sign(buyer_pk, "economic_transaction", {
+        "amount": "100.0", "buyer_did": buyer_did, "currency": "USDC", "seller_did": seller_did
+    }, now)
     tx_resp = client.post("/economic/transaction", json={
-        "buyer_did": buyer["did"],
-        "seller_did": seller["did"],
-        "agent_id": "test_agent",
-        "amount": 100.0,
-        "currency": "USDC",
-        "description": "test",
-        "signature": sig,
-        "message": msg,
-        "timestamp": now
+        "buyer_did": buyer_did, "seller_did": seller_did, "agent_id": "test",
+        "amount": 100.0, "currency": "USDC", "description": "test",
+        "signature": sig, "timestamp": now
     })
     assert tx_resp.status_code == 200
     tx_id = tx_resp.json()["tx_id"]
 
     # Fund escrow
     now = datetime.utcnow().isoformat()
-    msg = f"economic_fund|tx_id={tx_id}|{now}"
-    sig = buyer_pk.sign(msg.encode()).hex()
+    msg, sig = _sign(buyer_pk, "economic_fund", {"buyer_did": buyer_did, "tx_id": tx_id}, now)
     fund_resp = client.post("/economic/escrow/fund", json={
-        "tx_id": tx_id,
-        "buyer_did": buyer["did"],
-        "signature": sig,
-        "message": msg,
-        "timestamp": now
+        "tx_id": tx_id, "buyer_did": buyer_did, "signature": sig, "timestamp": now
     })
     assert fund_resp.status_code == 200
     escrow_id = fund_resp.json()["escrow_id"]
 
     # Dispute as buyer
     now = datetime.utcnow().isoformat()
-    msg = f"economic_dispute|escrow_id={escrow_id}&reason=test|{now}"
-    sig = buyer_pk.sign(msg.encode()).hex()
+    msg, sig = _sign(buyer_pk, "economic_dispute", {
+        "escrow_id": escrow_id, "filed_by": buyer_did, "reason": "test"
+    }, now)
     dispute_resp = client.post(f"/economic/escrow/{escrow_id}/dispute", json={
-        "escrow_id": escrow_id,
-        "filed_by": buyer["did"],
-        "reason": "test",
-        "proof_hash": "proof123",
-        "signature": sig,
-        "message": msg,
-        "timestamp": now
+        "escrow_id": escrow_id, "filed_by": buyer_did, "reason": "test",
+        "proof_hash": "proof123", "signature": sig, "timestamp": now
     })
     assert dispute_resp.status_code == 200
 
     # Seller tries to self-resolve — should fail (not an arbiter)
-    seller_pk = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(seller["private_key"]))
     now = datetime.utcnow().isoformat()
-    msg = f"economic_resolve|escrow_id={escrow_id}&favor_buyer=False|{now}"
-    sig = seller_pk.sign(msg.encode()).hex()
+    msg, sig = _sign(seller_pk, "economic_resolve", {
+        "escrow_id": escrow_id, "favor_buyer": "False", "resolved_by": seller_did
+    }, now)
     resolve_resp = client.post(f"/economic/escrow/{escrow_id}/resolve", json={
-        "escrow_id": escrow_id,
-        "favor_buyer": False,
-        "resolved_by": seller["did"],
-        "signature": sig,
-        "message": msg,
-        "timestamp": now
+        "escrow_id": escrow_id, "favor_buyer": False,
+        "resolved_by": seller_did, "signature": sig, "timestamp": now
     })
     assert resolve_resp.status_code == 403

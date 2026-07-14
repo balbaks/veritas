@@ -22,6 +22,7 @@ import api.content_routes as content_module
 agent_module.did_store_ref = identity_module.did_store
 economic_module.did_store_ref = identity_module.did_store
 governance_module.did_store_ref = identity_module.did_store
+governance_module.reputation_ref = identity_module.reputation
 content_module.did_store_ref = identity_module.did_store
 
 engine = TrustEngine()
