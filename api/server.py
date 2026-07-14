@@ -21,6 +21,7 @@ import api.content_routes as content_module
 
 agent_module.did_store_ref = identity_module.did_store
 economic_module.did_store_ref = identity_module.did_store
+economic_module.gov_engine_ref = governance_module.gov_engine
 governance_module.did_store_ref = identity_module.did_store
 governance_module.reputation_ref = identity_module.reputation
 content_module.did_store_ref = identity_module.did_store
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="VERITAS", version="1.1.4", lifespan=lifespan)
+app = FastAPI(title="VERITAS", version="1.2.0", lifespan=lifespan)
 
 app.include_router(identity_router, prefix="/identity", tags=["Identity"])
 app.include_router(content_router, prefix="/content", tags=["Content"])

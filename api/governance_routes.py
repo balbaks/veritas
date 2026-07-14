@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from governance.proposals import GovernanceEngine, ProposalType
 from governance.curation import CurationEngine
 from governance.database import save_proposal, save_arbiter, save_curated_list
-from identity.did import DID
+from identity.did import verify_request
 from typing import Optional
 
 governance_router = APIRouter()
@@ -12,15 +12,6 @@ curation_engine = CurationEngine()
 
 did_store_ref = None
 reputation_ref = None
-
-
-def _verify_did(did: str, message: str, signature: str, timestamp: str) -> bool:
-    if did_store_ref is None:
-        return False
-    pub_key = did_store_ref.get(did, {}).get("public_key")
-    if not pub_key:
-        return False
-    return DID.verify_with_timestamp(did, message, signature, pub_key, timestamp)
 
 
 class CreateProposalRequest(BaseModel):
@@ -89,10 +80,10 @@ class VerifyItemRequest(BaseModel):
 
 @governance_router.post("/proposal")
 async def create_proposal(req: CreateProposalRequest):
-    msg = DID.build_message("governance_proposal", {
-        "proposal_type": req.proposal_type, "proposer_did": req.proposer_did, "title": req.title
-    }, req.timestamp)
-    if not _verify_did(req.proposer_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.proposer_did, "gov.proposal",
+                          {"proposal_type": req.proposal_type,
+                           "proposer_did": req.proposer_did, "title": req.title},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired proposer signature")
     try:
         prop_type = ProposalType(req.proposal_type)
@@ -107,16 +98,12 @@ async def create_proposal(req: CreateProposalRequest):
 
 @governance_router.post("/vote")
 async def vote(req: VoteRequest):
-    msg = DID.build_message("governance_vote", {
-        "prop_id": req.prop_id, "support": str(req.support), "voter_did": req.voter_did
-    }, req.timestamp)
-    if not _verify_did(req.voter_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.voter_did, "gov.vote",
+                          {"prop_id": req.prop_id, "support": req.support},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired voter signature")
     rep = reputation_ref
-    if rep is None:
-        from api.identity_routes import reputation as _rep
-        rep = _rep
-    voting_power = rep.get_voting_power(req.voter_did)
+    voting_power = rep.get_voting_power(req.voter_did) if rep else 1.0
     success = gov_engine.vote(req.prop_id, req.voter_did, req.support, voting_power)
     if not success:
         raise HTTPException(status_code=400, detail="Vote failed")
@@ -127,10 +114,7 @@ async def vote(req: VoteRequest):
 @governance_router.post("/tally")
 async def tally(req: TallyRequest):
     rep = reputation_ref
-    if rep is None:
-        from api.identity_routes import reputation as _rep
-        rep = _rep
-    total_vp = sum(rep.get_voting_power(did) for did in rep.scores.keys())
+    total_vp = sum(rep.get_voting_power(did) for did in rep.scores.keys()) if rep else 100
     if total_vp == 0:
         total_vp = 100
     result = gov_engine.tally(req.prop_id, total_vp)
@@ -142,8 +126,9 @@ async def tally(req: TallyRequest):
 
 @governance_router.post("/execute/{prop_id}")
 async def execute(prop_id: str, req: ExecuteRequest):
-    msg = DID.build_message("governance_execute", {"executor_did": req.executor_did, "prop_id": prop_id}, req.timestamp)
-    if not _verify_did(req.executor_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.executor_did, "gov.execute",
+                          {"executor_did": req.executor_did, "prop_id": prop_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired executor signature")
     success = gov_engine.execute(prop_id)
     if not success:
@@ -177,8 +162,9 @@ def get_arbiters():
 
 @governance_router.post("/curation/list")
 async def create_list(req: CreateListRequest):
-    msg = DID.build_message("governance_curation_list", {"name": req.name, "owner_did": req.owner_did}, req.timestamp)
-    if not _verify_did(req.owner_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.owner_did, "gov.curation.create",
+                          {"name": req.name, "owner_did": req.owner_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired owner signature")
     list_id = curation_engine.create_list(req.owner_did, req.name, req.description, req.criteria)
     await save_curated_list(curation_engine.get_list(list_id))
@@ -187,10 +173,10 @@ async def create_list(req: CreateListRequest):
 
 @governance_router.post("/curation/curator")
 async def add_curator(req: AddCuratorRequest):
-    msg = DID.build_message("governance_curation_curator", {
-        "added_by": req.added_by, "curator_did": req.curator_did, "list_id": req.list_id
-    }, req.timestamp)
-    if not _verify_did(req.added_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.added_by, "gov.curation.curator.add",
+                          {"added_by": req.added_by, "curator_did": req.curator_did,
+                           "list_id": req.list_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     success = curation_engine.add_curator(req.list_id, req.curator_did, req.added_by)
     if not success:
@@ -201,10 +187,10 @@ async def add_curator(req: AddCuratorRequest):
 
 @governance_router.post("/curation/item")
 async def add_item(req: AddItemRequest):
-    msg = DID.build_message("governance_curation_item", {
-        "added_by": req.added_by, "content_hash": req.content_hash, "list_id": req.list_id
-    }, req.timestamp)
-    if not _verify_did(req.added_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.added_by, "gov.curation.add",
+                          {"added_by": req.added_by, "content_hash": req.content_hash,
+                           "list_id": req.list_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     lst = curation_engine.get_list(req.list_id)
     if not lst or req.added_by not in lst["curators"]:
@@ -218,10 +204,10 @@ async def add_item(req: AddItemRequest):
 
 @governance_router.post("/curation/verify")
 async def verify_item(req: VerifyItemRequest):
-    msg = DID.build_message("governance_curation_verify", {
-        "content_hash": req.content_hash, "list_id": req.list_id, "verifier_did": req.verifier_did
-    }, req.timestamp)
-    if not _verify_did(req.verifier_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.verifier_did, "gov.curation.verify",
+                          {"content_hash": req.content_hash, "list_id": req.list_id,
+                           "verifier_did": req.verifier_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     lst = curation_engine.get_list(req.list_id)
     if not lst or req.verifier_did not in lst["curators"]:
@@ -235,10 +221,10 @@ async def verify_item(req: VerifyItemRequest):
 
 @governance_router.post("/curation/reject")
 async def reject_item(req: VerifyItemRequest):
-    msg = DID.build_message("governance_curation_reject", {
-        "content_hash": req.content_hash, "list_id": req.list_id, "verifier_did": req.verifier_did
-    }, req.timestamp)
-    if not _verify_did(req.verifier_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.verifier_did, "gov.curation.remove",
+                          {"content_hash": req.content_hash, "list_id": req.list_id,
+                           "verifier_did": req.verifier_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     lst = curation_engine.get_list(req.list_id)
     if not lst or req.verifier_did not in lst["curators"]:

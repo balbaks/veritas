@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from agents.registry import AgentRegistry
 from agents.delegation import DelegationManager
 from agents.database import save_dispute, save_agent, save_delegation
-from identity.did import DID
+from identity.did import verify_request
 from datetime import datetime
 from typing import List, Optional
 
@@ -65,35 +65,24 @@ class LogActionRequest(BaseModel):
     timestamp: str
 
 
-def _verify_did(did: str, message: str, signature: str, timestamp: str) -> bool:
-    if did_store_ref is None:
-        return False
-    pub_key = did_store_ref.get(did, {}).get("public_key")
-    if not pub_key:
-        return False
-    return DID.verify_with_timestamp(did, message, signature, pub_key, timestamp)
-
-
 @agent_router.post("/register")
 async def register_agent(req: RegisterAgentRequest):
-    msg = DID.build_message("agent_register", {"agent_type": req.agent_type, "owner_did": req.owner_did}, req.timestamp)
-    if not _verify_did(req.owner_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.owner_did, "agent.register",
+                          {"agent_type": req.agent_type, "owner_did": req.owner_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired owner signature")
     agent_id = agent_registry.register(
         req.owner_did, req.agent_type, req.capabilities, req.metadata
     )
     await save_agent(agent_registry.get(agent_id))
-    return {
-        "agent_id": agent_id,
-        "owner_did": req.owner_did,
-        "agent_type": req.agent_type
-    }
+    return {"agent_id": agent_id, "owner_did": req.owner_did, "agent_type": req.agent_type}
 
 
 @agent_router.post("/delegate")
 async def delegate(req: DelegateRequest):
-    msg = DID.build_message("agent_delegate", {"agent_id": req.agent_id, "owner_did": req.owner_did}, req.timestamp)
-    if not _verify_did(req.owner_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.owner_did, "agent.delegate",
+                          {"agent_id": req.agent_id, "owner_did": req.owner_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired owner signature")
     del_id = delegation_manager.delegate(
         req.owner_did, req.agent_id, req.permissions, req.duration_hours
@@ -120,8 +109,9 @@ def get_owner_delegations(owner_did: str):
 
 @agent_router.post("/delegate/{delegation_id}/revoke")
 def revoke_delegation(delegation_id: str, req: RevokeRequest):
-    msg = DID.build_message("agent_revoke", {"delegation_id": delegation_id, "owner_did": req.owner_did}, req.timestamp)
-    if not _verify_did(req.owner_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.owner_did, "agent.delegate.revoke",
+                          {"delegation_id": delegation_id, "owner_did": req.owner_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired owner signature")
     delegation_manager.revoke(delegation_id)
     return {"delegation_id": delegation_id, "active": False}
@@ -129,10 +119,10 @@ def revoke_delegation(delegation_id: str, req: RevokeRequest):
 
 @agent_router.post("/delegate/log")
 def log_action(req: LogActionRequest):
-    msg = DID.build_message("agent_log", {
-        "action": req.action, "authorized_by": req.authorized_by, "delegation_id": req.delegation_id
-    }, req.timestamp)
-    if not _verify_did(req.authorized_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.authorized_by, "agent.delegate.log",
+                          {"action": req.action, "authorized_by": req.authorized_by,
+                           "delegation_id": req.delegation_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     delegation_manager.log_action(req.delegation_id, req.action, req.details)
     return {"delegation_id": req.delegation_id, "action": req.action, "logged": True}
@@ -140,10 +130,10 @@ def log_action(req: LogActionRequest):
 
 @agent_router.post("/{agent_id}/transaction")
 def record_transaction(agent_id: str, req: TransactionRequest):
-    msg = DID.build_message("agent_transaction", {
-        "action": str(req.success), "agent_id": agent_id, "authorized_by": req.authorized_by
-    }, req.timestamp)
-    if not _verify_did(req.authorized_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.authorized_by, "agent.transaction",
+                          {"agent_id": agent_id, "authorized_by": req.authorized_by,
+                           "success": req.success},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
 
     agent = agent_registry.get(agent_id)
@@ -167,8 +157,9 @@ def record_transaction(agent_id: str, req: TransactionRequest):
 
 @agent_router.post("/{agent_id}/dispute")
 async def file_dispute(agent_id: str, req: DisputeRequest):
-    msg = DID.build_message("agent_dispute", {"agent_id": agent_id, "filed_by": req.filed_by}, req.timestamp)
-    if not _verify_did(req.filed_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.filed_by, "agent.dispute",
+                          {"agent_id": agent_id, "filed_by": req.filed_by},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     agent_registry.file_dispute(agent_id, req.details, req.filed_by)
     await save_dispute(agent_id, req.details, req.filed_by, datetime.utcnow().isoformat())

@@ -2,21 +2,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from economic.escrow import EconomicEngine
 from economic.database import save_transaction, save_escrow
-from identity.did import DID
+from identity.did import verify_request
 
 economic_router = APIRouter()
 economic_engine = EconomicEngine()
 
 did_store_ref = None
-
-
-def _verify_did(did: str, message: str, signature: str, timestamp: str) -> bool:
-    if did_store_ref is None:
-        return False
-    pub_key = did_store_ref.get(did, {}).get("public_key")
-    if not pub_key:
-        return False
-    return DID.verify_with_timestamp(did, message, signature, pub_key, timestamp)
+gov_engine_ref = None
 
 
 class CreateTransactionRequest(BaseModel):
@@ -63,11 +55,10 @@ class ResolveRequest(BaseModel):
 
 @economic_router.post("/transaction")
 async def create_transaction(req: CreateTransactionRequest):
-    msg = DID.build_message("economic_transaction", {
-        "amount": str(req.amount), "buyer_did": req.buyer_did,
-        "currency": req.currency, "seller_did": req.seller_did
-    }, req.timestamp)
-    if not _verify_did(req.buyer_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.buyer_did, "escrow.transaction.create",
+                          {"amount": req.amount, "buyer_did": req.buyer_did,
+                           "currency": req.currency, "seller_did": req.seller_did},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired buyer signature")
     tx_id = economic_engine.create_transaction(
         req.buyer_did, req.seller_did, req.agent_id,
@@ -79,8 +70,9 @@ async def create_transaction(req: CreateTransactionRequest):
 
 @economic_router.post("/escrow/fund")
 async def fund_escrow(req: FundRequest):
-    msg = DID.build_message("economic_fund", {"buyer_did": req.buyer_did, "tx_id": req.tx_id}, req.timestamp)
-    if not _verify_did(req.buyer_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.buyer_did, "escrow.fund",
+                          {"tx_id": req.tx_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired buyer signature")
 
     tx = economic_engine.get_transaction(req.tx_id)
@@ -99,8 +91,9 @@ async def fund_escrow(req: FundRequest):
 
 @economic_router.post("/escrow/{escrow_id}/release")
 async def release_escrow(escrow_id: str, req: ReleaseRequest):
-    msg = DID.build_message("economic_release", {"escrow_id": escrow_id, "seller_did": req.seller_did}, req.timestamp)
-    if not _verify_did(req.seller_did, msg, req.signature, req.timestamp):
+    if not verify_request(req.seller_did, "escrow.release",
+                          {"escrow_id": escrow_id},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired seller signature")
 
     escrow = economic_engine.get_escrow(escrow_id)
@@ -119,10 +112,9 @@ async def release_escrow(escrow_id: str, req: ReleaseRequest):
 
 @economic_router.post("/escrow/{escrow_id}/dispute")
 async def file_dispute(escrow_id: str, req: DisputeRequest):
-    msg = DID.build_message("economic_dispute", {
-        "escrow_id": escrow_id, "filed_by": req.filed_by, "reason": req.reason
-    }, req.timestamp)
-    if not _verify_did(req.filed_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.filed_by, "escrow.dispute",
+                          {"escrow_id": escrow_id, "reason": req.reason},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
 
     escrow = economic_engine.get_escrow(escrow_id)
@@ -141,18 +133,16 @@ async def file_dispute(escrow_id: str, req: DisputeRequest):
 
 @economic_router.post("/escrow/{escrow_id}/resolve")
 async def resolve_dispute(escrow_id: str, req: ResolveRequest):
-    msg = DID.build_message("economic_resolve", {
-        "escrow_id": escrow_id, "favor_buyer": str(req.favor_buyer), "resolved_by": req.resolved_by
-    }, req.timestamp)
-    if not _verify_did(req.resolved_by, msg, req.signature, req.timestamp):
+    if not verify_request(req.resolved_by, "escrow.resolve",
+                          {"escrow_id": escrow_id, "favor_buyer": req.favor_buyer},
+                          req.timestamp, req.signature, did_store_ref or {}):
         raise HTTPException(status_code=403, detail="Invalid or expired resolver signature")
 
     escrow = economic_engine.get_escrow(escrow_id)
     if not escrow:
         raise HTTPException(status_code=404, detail="Escrow not found")
 
-    from api.governance_routes import gov_engine
-    if not gov_engine.is_arbiter(req.resolved_by):
+    if gov_engine_ref is None or not gov_engine_ref.is_arbiter(req.resolved_by):
         raise HTTPException(status_code=403, detail="Only elected arbiters can resolve disputes")
 
     success = economic_engine.resolve_dispute(escrow_id, req.favor_buyer, req.resolved_by)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from identity.did import DID
+from identity.did import DID, verify_request
 from identity.reputation import ReputationRegistry
 from identity.database import save_identity, save_reputation_event, save_stake
 from datetime import datetime
@@ -8,13 +8,6 @@ from datetime import datetime
 identity_router = APIRouter()
 reputation = ReputationRegistry()
 did_store: dict = {}
-
-
-class VerifyRequest(BaseModel):
-    did: str
-    message: str
-    signature: str
-    public_key: str
 
 
 class ReputationAction(BaseModel):
@@ -38,9 +31,7 @@ async def create_did():
     private_key = identity.private_key.private_bytes_raw().hex()
     created_at = datetime.utcnow().isoformat()
 
-    did_store[identity.did] = {
-        "public_key": public_key
-    }
+    did_store[identity.did] = {"public_key": public_key}
     reputation.new_identity(identity.did)
     await save_identity(identity.did, public_key, created_at)
 
@@ -50,12 +41,6 @@ async def create_did():
         "private_key": private_key,
         "warning": "STORE THIS PRIVATE KEY SECURELY. It will NEVER be shown again and is NOT stored on the server."
     }
-
-
-@identity_router.post("/did/verify")
-def verify_did(req: VerifyRequest):
-    valid = DID.verify(req.did, req.message, req.signature, req.public_key)
-    return {"did": req.did, "valid": valid}
 
 
 @identity_router.get("/reputation/{did}")
@@ -74,13 +59,10 @@ def get_reputation(did: str):
 
 @identity_router.post("/reputation/{did}/increment")
 async def increment_reputation(did: str, req: ReputationAction):
-    pub_key = did_store.get(did, {}).get("public_key")
-    if not pub_key:
-        raise HTTPException(status_code=404, detail="DID public key not found")
-    msg = DID.build_message("reputation_increment", {"amount": str(req.amount), "did": did, "reason": req.reason}, req.timestamp)
-    if not DID.verify_with_timestamp(did, msg, req.signature, pub_key, req.timestamp):
+    if not verify_request(did, "identity.reputation.increment",
+                          {"amount": req.amount, "did": did, "reason": req.reason},
+                          req.timestamp, req.signature, did_store):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
-
     reputation.increment(did, req.amount, req.reason)
     await save_reputation_event(did, "increment", req.amount, req.reason, datetime.utcnow().isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
@@ -88,13 +70,10 @@ async def increment_reputation(did: str, req: ReputationAction):
 
 @identity_router.post("/reputation/{did}/decrement")
 async def decrement_reputation(did: str, req: ReputationAction):
-    pub_key = did_store.get(did, {}).get("public_key")
-    if not pub_key:
-        raise HTTPException(status_code=404, detail="DID public key not found")
-    msg = DID.build_message("reputation_decrement", {"amount": str(req.amount), "did": did, "reason": req.reason}, req.timestamp)
-    if not DID.verify_with_timestamp(did, msg, req.signature, pub_key, req.timestamp):
+    if not verify_request(did, "identity.reputation.decrement",
+                          {"amount": req.amount, "did": did, "reason": req.reason},
+                          req.timestamp, req.signature, did_store):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
-
     reputation.decrement(did, req.amount, req.reason)
     await save_reputation_event(did, "decrement", req.amount, req.reason, datetime.utcnow().isoformat())
     return {"did": did, "score": reputation.get_score(did), "standing": reputation.get_standing(did)}
@@ -102,11 +81,9 @@ async def decrement_reputation(did: str, req: ReputationAction):
 
 @identity_router.post("/stake")
 async def stake(req: StakeRequest):
-    pub_key = did_store.get(req.did, {}).get("public_key")
-    if not pub_key:
-        raise HTTPException(status_code=404, detail="DID not found")
-    msg = DID.build_message("stake", {"amount": str(req.amount), "did": req.did}, req.timestamp)
-    if not DID.verify_with_timestamp(req.did, msg, req.signature, pub_key, req.timestamp):
+    if not verify_request(req.did, "identity.stake",
+                          {"amount": req.amount, "did": req.did},
+                          req.timestamp, req.signature, did_store):
         raise HTTPException(status_code=403, detail="Invalid or expired signature")
     success = reputation.stake(req.did, req.amount)
     if not success:
