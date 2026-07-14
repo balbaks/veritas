@@ -29,6 +29,7 @@ class CreateTransactionRequest(BaseModel):
     description: str
     signature: str
     message: str
+    timestamp: str
 
 
 class FundRequest(BaseModel):
@@ -36,6 +37,7 @@ class FundRequest(BaseModel):
     buyer_did: str
     signature: str
     message: str
+    timestamp: str
 
 
 class ReleaseRequest(BaseModel):
@@ -43,6 +45,7 @@ class ReleaseRequest(BaseModel):
     seller_did: str
     signature: str
     message: str
+    timestamp: str
 
 
 class DisputeRequest(BaseModel):
@@ -52,6 +55,7 @@ class DisputeRequest(BaseModel):
     proof_hash: str
     signature: str
     message: str
+    timestamp: str
 
 
 class ResolveRequest(BaseModel):
@@ -60,6 +64,7 @@ class ResolveRequest(BaseModel):
     resolved_by: str
     signature: str
     message: str
+    timestamp: str
 
 
 @economic_router.post("/transaction")
@@ -139,8 +144,10 @@ async def resolve_dispute(escrow_id: str, req: ResolveRequest):
     escrow = economic_engine.get_escrow(escrow_id)
     if not escrow:
         raise HTTPException(status_code=404, detail="Escrow not found")
-    if req.resolved_by not in [escrow["buyer_did"], escrow["seller_did"]]:
-        raise HTTPException(status_code=403, detail="Only escrow parties can resolve disputes")
+
+    from api.governance_routes import gov_engine
+    if not gov_engine.is_arbiter(req.resolved_by):
+        raise HTTPException(status_code=403, detail="Only elected arbiters can resolve disputes")
 
     success = economic_engine.resolve_dispute(escrow_id, req.favor_buyer, req.resolved_by)
     if not success:
