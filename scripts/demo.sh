@@ -59,19 +59,31 @@ _status() { echo "$1" | tail -1; }
 _jq()     { echo "$1" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); print(d.get('$2',''))" 2>/dev/null; }
 
-# ── preflight ────────────────────────────────────────────────────────────────
+# ── preflight: clean database + fresh server ─────────────────────────────────
 banner "VERITAS v1.2.0 — VIOLATION-AND-RESOLUTION DEMO"
 echo   "Server: $BASE"
 echo   "The case: an AI agent exceeds its 100-credit delegation cap."
 echo   "The question: does governance → arbiter → escrow actually fire?"
 hr
 
+DB_PATH="$VERITAS_ROOT/veritas.db"
+info "Resetting database for deterministic demo..."
+fuser -k 8000/tcp 2>/dev/null; sleep 1
+[ -f "$DB_PATH" ] && rm -f "$DB_PATH" && info "Removed existing $DB_PATH"
+
+UVICORN="$VERITAS_ROOT/venv/bin/uvicorn"
+[ ! -x "$UVICORN" ] && UVICORN="uvicorn"
+"$UVICORN" api.server:app --app-dir "$VERITAS_ROOT" --port 8000 --log-level warning &
+SERVER_PID=$!
+sleep 3
+
 HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")
 if [ "$HTTP" != "200" ]; then
-    echo -e "${RED}Server not responding (HTTP $HTTP). Run: uvicorn api.server:app --port 8000${RST}"
+    echo -e "${RED}Server failed to start (HTTP $HTTP).${RST}"
+    kill "$SERVER_PID" 2>/dev/null
     exit 1
 fi
-ok "Server operational"
+ok "Fresh server operational (PID $SERVER_PID) — empty database, electorate: 0 identities"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 1 — Create identities
@@ -95,23 +107,27 @@ R[L1_identity]="✓ Alice / Bob / Carol created"
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 2 — Carol stakes 100,000 credits to build arbiter-tier voting power
 # ══════════════════════════════════════════════════════════════════════════════
-step 2 "Carol stakes 5,000,000 credits → voting power sufficient to meet quorum solo"
+step 2 "Carol stakes 10,000 credits → voting power sufficient to meet quorum in this 3-identity electorate"
 
-SIGNED=$(_sign "$CAROL_PK" "identity.stake" "{'amount': 5000000.0, 'did': '$CAROL_DID'}")
+SIGNED=$(_sign "$CAROL_PK" "identity.stake" "{'amount': 10000.0, 'did': '$CAROL_DID'}")
 SIG=$(sig_of "$SIGNED"); TS=$(ts_of "$SIGNED")
 
 RAW=$(_post "/identity/stake" \
-    "{\"did\":\"$CAROL_DID\",\"amount\":5000000.0,\"signature\":\"$SIG\",\"timestamp\":\"$TS\"}")
+    "{\"did\":\"$CAROL_DID\",\"amount\":10000.0,\"signature\":\"$SIG\",\"timestamp\":\"$TS\"}")
 HTTP=$(_status "$RAW"); BODY=$(_body "$RAW")
 
 if [ "$HTTP" = "200" ]; then
     STAKED=$(_jq "$BODY" "total_staked")
-    ok "Carol staked 5,000,000 credits (total: $STAKED)"
+    ok "Carol staked 10,000 credits (total: $STAKED)"
     # VP = (score/50) * (1 + sqrt(stake)/10); stake bonus caps at 20 rep points
-    CAROL_VP=$(python3 -c "import math; score=min(70,50+20); print(f'{(score/50)*(1+math.sqrt(5000000)/10):.2f}')")
-    info "Carol's voting power ≈ $CAROL_VP (stake-boosted; base VP = 1.0)"
-    info "High stake = serious protocol commitment. Carol alone meets 20% quorum vs up to ~1200 existing identities."
-    R[L2_carol_stake]="✓ Staked 5,000,000 credits  VP≈$CAROL_VP"
+    # Fresh DB: electorate = {Alice VP≈1, Bob VP≈1, Carol VP≈15.4} → total ≈ 17.4
+    # Carol participation ≈ 88% — well above 20% quorum threshold
+    CAROL_VP=$(python3 -c "import math; score=min(70,50+20); print(f'{(score/50)*(1+math.sqrt(10000)/10):.2f}')")
+    info "Carol's voting power ≈ $CAROL_VP  (Alice≈1.0, Bob≈1.0, Carol≈$CAROL_VP — total≈$( \
+        python3 -c "import math; vp=1.4*(1+math.sqrt(10000)/10); print(f'{2+vp:.1f}')"))"
+    info "Carol participation ≈ $( \
+        python3 -c "import math; vp=1.4*(1+math.sqrt(10000)/10); print(f'{vp/(2+vp)*100:.1f}')") % — passes 20% quorum"
+    R[L2_carol_stake]="✓ Staked 10,000 credits  VP≈$CAROL_VP"
 else
     warn "Stake returned HTTP $HTTP: $BODY"
     R[L2_carol_stake]="⚠ Stake failed (HTTP $HTTP)"
@@ -274,6 +290,9 @@ fi
 # STEP 8 — Governance: elect Carol as arbiter
 #          propose → vote (Carol, stake-boosted VP) → tally → execute
 # ══════════════════════════════════════════════════════════════════════════════
+# NOTE: In this demo, Carol self-elects as arbiter. In production, arbiter election requires
+# distributed quorum from multiple independent voters. Arbiter capture by a single whale is
+# a documented Known Challenge — see docs/SPEC.md.
 step 8 "Governance cycle: elect Carol as arbiter"
 
 echo   "  Sub-step 8a — Alice proposes Carol as arbiter"
@@ -322,7 +341,7 @@ if [ -n "$PROP_ID" ]; then
 
     if [ "$HTTP" = "200" ]; then
         ok "Carol voted YES — server-computed voting_power: $VP"
-        info "Voting power = (rep_score/50) × (1 + √stake/10). Stake=100,000 → VP≈$VP"
+        info "Voting power = (rep_score/50) × (1 + √stake/10). Stake=10,000 → VP≈$VP"
     else
         warn "Vote HTTP $HTTP: $BODY"
     fi
