@@ -4,10 +4,10 @@
 
 ---
 
-## STATUS (v1.2.0)
+## STATUS (v1.2.0, July 2026) · full spec: docs/SPEC.md
 
 ### Built
-- All 5 layers: Trust Protocol, Identity & Reputation, Content Provenance, Agent Trust, Economic Trust, Governance
+- All 6 layers (0–5): Trust Protocol, Identity & Reputation, Content Provenance, Agent Trust, Economic Trust, Governance
 - 25 authenticated endpoints with canonical payload binding and 60-second replay protection
 - 13 tests including a route-enumerating meta-test that verifies every mutating endpoint rejects bad signatures
 - Public protocol specification (docs/SPEC.md)
