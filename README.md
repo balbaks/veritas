@@ -8,6 +8,8 @@
 
 A protocol for verifiable provenance, identity, and attestation — backed by Ed25519 cryptography, not platform authority.
 
+▶️ Demo: https://asciinema.org/a/5iq9X2ggmaVJNWDH
+
 ## Running
 
 docker build -t veritas-node .
