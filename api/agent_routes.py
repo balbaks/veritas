@@ -30,6 +30,7 @@ class TransactionRequest(BaseModel):
     authorized_by: str
     signature: str
     timestamp: str
+    amount: Optional[float] = None
 
 
 class DisputeRequest(BaseModel):
@@ -145,6 +146,20 @@ def record_transaction(agent_id: str, req: TransactionRequest):
 
     if not is_owner and not has_delegation:
         raise HTTPException(status_code=403, detail="Not authorized to record transactions for this agent")
+
+    if req.amount is not None:
+        for d in delegation_manager.get_agent_delegations(agent_id):
+            for perm in d["permissions"]:
+                if perm.startswith("spend_up_to:") and perm.endswith("_credits"):
+                    try:
+                        cap = float(perm.split(":")[1].replace("_credits", ""))
+                        if req.amount > cap:
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"Transaction exceeds delegation spend cap of {cap} credits"
+                            )
+                    except (ValueError, IndexError):
+                        pass
 
     agent_registry.record_transaction(agent_id, req.success, req.details)
     agent = agent_registry.get(agent_id)

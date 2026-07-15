@@ -150,6 +150,25 @@ async def resolve_dispute(escrow_id: str, req: ResolveRequest):
         raise HTTPException(status_code=400, detail="Cannot resolve")
     await save_escrow(economic_engine.get_escrow(escrow_id))
     await save_transaction(economic_engine.get_transaction(escrow["tx_id"]))
+    from api.agent_routes import agent_registry
+    tx = economic_engine.get_transaction(escrow["tx_id"])
+    if tx:
+        _agent_id = tx.get("agent_id")
+        _agent = agent_registry.get(_agent_id) if _agent_id else None
+        if _agent:
+            _owner = _agent.get("owner_did")
+            if _owner == tx.get("buyer_did"):
+                _agent_lost = not req.favor_buyer
+            elif _owner == tx.get("seller_did"):
+                _agent_lost = req.favor_buyer
+            else:
+                _agent_lost = False  # owner not a party — cannot attribute fault
+            if _agent_lost:
+                agent_registry.file_dispute(
+                    _agent_id,
+                    "dispute_lost_resolved_by_" + req.resolved_by,
+                    req.resolved_by
+                )
     return {"escrow_id": escrow_id, "status": "resolved"}
 
 

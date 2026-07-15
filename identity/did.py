@@ -1,6 +1,6 @@
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 
 
@@ -51,8 +51,8 @@ def verify_request(did: str, op: str, params: dict, timestamp: str, signature: s
     4. Returns DID.verify(did, expected, signature, pub_key_hex).
     """
     try:
-        sig_time = datetime.fromisoformat(timestamp)
-        now = datetime.utcnow()
+        sig_time = datetime.fromisoformat(timestamp).replace(tzinfo=None)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if abs((now - sig_time).total_seconds()) > 60:
             return False
     except Exception:
