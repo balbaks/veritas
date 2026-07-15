@@ -105,6 +105,16 @@ See docs/SPEC.md section 13.1 for the complete table of op IDs and the exact par
 
 pytest tests/ -v
 
+## Please Break It
+
+VERITAS is a trust protocol — it only works if it can't be cheated.
+
+If you find a vulnerability in the auth model, the canonical payload binding, the replay protection, the governance cycle, or the escrow state machine, open an issue or email me. Public credit for every verified finding.
+
+Start here:
+- Threat Model: docs/SPEC.md#14-threat-model
+- Known Challenges: docs/SPEC.md#7-known-limitations
+
 ## License
 
 MIT
