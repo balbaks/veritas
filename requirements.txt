@@ -19,3 +19,4 @@ typing_extensions==4.16.0
 uvicorn==0.51.0
 pytest
 httpx
+httpx
