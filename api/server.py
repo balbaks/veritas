@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from core.engine import TrustEngine
@@ -88,6 +89,16 @@ def root():
         "proposals": len(gov_engine.proposals),
         "arbiters": len(gov_engine.arbiters)
     }
+
+
+@app.get("/ui")
+def ui():
+    return FileResponse("static/story.html")
+
+
+@app.get("/story")
+def story():
+    return FileResponse("static/story.html")
 
 
 @app.post("/claim")
